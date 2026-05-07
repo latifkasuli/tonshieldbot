@@ -1,0 +1,21 @@
+{
+  "name": "@tonshield/ton-scanner",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@ton-api/client": "^0.4.0",
+    "@ton/core": "^0.63.1",
+    "@ton/ton": "^16.2.4",
+    "@tonshield/risk-engine": "workspace:*",
+    "@tonshield/shared": "workspace:*",
+    "zod": "^4.4.3"
+  },
+  "scripts": {
+    "typecheck": "tsc -p ../../tsconfig.json --noEmit",
+    "test": "vitest run"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "name": "@tonshield/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc -p ../../tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@hono/node-server": "^2.0.1",
+    "@tonshield/risk-engine": "workspace:*",
+    "@tonshield/shared": "workspace:*",
+    "@tonshield/ton-scanner": "workspace:*",
+    "hono": "^4.12.18",
+    "zod": "^4.4.3"
+  }
+}
