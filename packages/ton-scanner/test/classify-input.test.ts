@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyInput } from "../src/index.ts";
+import { classifyInput } from "../src/classify-input.ts";
 
 describe("classifyInput", () => {
   it("classifies Telegram handles", () => {
