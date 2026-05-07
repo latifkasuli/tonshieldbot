@@ -1,0 +1,16 @@
+{
+  "name": "@tonshield/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc -p ../../tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@tonshield/shared": "workspace:*",
+    "bullmq": "^5.76.6",
+    "ioredis": "^5.10.1"
+  }
+}
