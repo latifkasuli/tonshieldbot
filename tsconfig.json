@@ -3,6 +3,7 @@
   "compilerOptions": {
     "paths": {
       "@tonshield/risk-engine": ["./packages/risk-engine/src/index.ts"],
+      "@tonshield/safe-fetch": ["./packages/safe-fetch/src/index.ts"],
       "@tonshield/shared": ["./packages/shared/src/index.ts"],
       "@tonshield/ton-scanner": ["./packages/ton-scanner/src/index.ts"]
     }

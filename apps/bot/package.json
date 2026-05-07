@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@tonshield/risk-engine": "workspace:*",
+    "@tonshield/safe-fetch": "workspace:*",
     "@tonshield/shared": "workspace:*",
     "@tonshield/ton-scanner": "workspace:*",
     "grammy": "^1.42.0",

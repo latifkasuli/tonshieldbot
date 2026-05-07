@@ -1,6 +1,6 @@
-import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { z } from "zod";
+import { TtlFetchCache } from "@tonshield/safe-fetch";
 import { createBasicScan } from "@tonshield/ton-scanner";
 
 const scanRequestSchema = z.object({
@@ -9,6 +9,7 @@ const scanRequestSchema = z.object({
 
 export const createApiServer = (): Hono => {
   const app = new Hono();
+  const manifestCache = new TtlFetchCache();
 
   app.get("/health", (context) =>
     context.json({
@@ -33,8 +34,8 @@ export const createApiServer = (): Hono => {
       );
     }
 
-    const report = createBasicScan({
-      id: randomUUID(),
+    const report = await createBasicScan({
+      cache: manifestCache,
       rawInput: body.data.input,
     });
 

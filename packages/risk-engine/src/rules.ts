@@ -49,6 +49,69 @@ export const coreRules = [
     recommendation: "Verify the Jetton master address before trusting its name, ticker, or icon.",
     defaultScoreDelta: 25,
   },
+  {
+    id: "TONCONNECT_MANIFEST_SSRF_BLOCKED",
+    category: "tonconnect",
+    severity: "high",
+    title: "Manifest URL targets internal infrastructure",
+    description:
+      "The manifest URL resolved to a private, loopback, link-local, or reserved IP address.",
+    recommendation: "Do not connect. This request may be probing internal systems.",
+    defaultScoreDelta: 45,
+  },
+  {
+    id: "TONCONNECT_MANIFEST_FETCH_FAILED",
+    category: "tonconnect",
+    severity: "medium",
+    title: "Manifest could not be fetched",
+    description:
+      "TON Shield was unable to retrieve the TON Connect manifest or the response was too large.",
+    recommendation:
+      "Do not connect until the app identity can be verified through an official source.",
+    defaultScoreDelta: 20,
+  },
+  {
+    id: "TONCONNECT_MANIFEST_INVALID",
+    category: "tonconnect",
+    severity: "medium",
+    title: "Manifest content is invalid",
+    description:
+      "The fetched manifest did not pass schema validation. Required fields are missing or malformed.",
+    recommendation:
+      "Treat this request with caution. A legitimate app should have a valid TON Connect manifest.",
+    defaultScoreDelta: 20,
+  },
+  {
+    id: "TONCONNECT_MANIFEST_CONTENT_SUSPICIOUS",
+    category: "tonconnect",
+    severity: "low",
+    title: "Manifest served with unexpected content type",
+    description: "The manifest URL returned HTML or an unrecognized content type instead of JSON.",
+    recommendation: "Verify the manifest URL points to a valid JSON file before connecting.",
+    defaultScoreDelta: 10,
+  },
+  {
+    id: "TRANSACTION_MALFORMED_MESSAGE",
+    category: "transaction",
+    severity: "medium",
+    title: "Transaction contains unreadable messages",
+    description:
+      "One or more messages in the transaction could not be decoded. The destination address or amount is missing or malformed.",
+    recommendation:
+      "Treat this transaction with caution. A legitimate app should produce well-formed messages.",
+    defaultScoreDelta: 25,
+  },
+  {
+    id: "TONCONNECT_PROJECT_IMPERSONATION",
+    category: "tonconnect",
+    severity: "critical",
+    title: "Known project impersonation detected",
+    description:
+      "The manifest name, manifest host, or declared app URL resembles a known project but is not on its official domain.",
+    recommendation:
+      "Do not connect. Verify this request through the official project channels first.",
+    defaultScoreDelta: 80,
+  },
 ] as const satisfies readonly RuleDefinition[];
 
 export type CoreRuleId = (typeof coreRules)[number]["id"];

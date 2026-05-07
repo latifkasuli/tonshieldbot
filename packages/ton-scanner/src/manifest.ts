@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { Result } from "@tonshield/shared";
 import { err, ok } from "@tonshield/shared";
+import { parseJson } from "./utils.ts";
 
 const tonConnectManifestSchema = z.object({
   url: z.url(),
@@ -60,13 +61,3 @@ export const checkManifestIdentity = (
   declaredAppOrigin: manifest.url.origin,
   hasOriginMismatch: manifestUrl.origin !== manifest.url.origin,
 });
-
-type JsonParseResult = { readonly ok: true; readonly value: unknown } | { readonly ok: false };
-
-const parseJson = (rawInput: string): JsonParseResult => {
-  try {
-    return { ok: true, value: JSON.parse(rawInput) as unknown };
-  } catch {
-    return { ok: false };
-  }
-};

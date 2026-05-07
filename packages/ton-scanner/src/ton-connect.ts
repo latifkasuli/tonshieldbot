@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { Result } from "@tonshield/shared";
 import { err, ok } from "@tonshield/shared";
+import { parseJson, parseUrl } from "./utils.ts";
 
 const connectItemSchema = z.looseObject({
   name: z.string().min(1),
@@ -90,22 +91,4 @@ export const parseTonConnectLink = (
       items,
     },
   });
-};
-
-const parseUrl = (rawInput: string): URL | null => {
-  try {
-    return new URL(rawInput);
-  } catch {
-    return null;
-  }
-};
-
-type JsonParseResult = { readonly ok: true; readonly value: unknown } | { readonly ok: false };
-
-const parseJson = (rawInput: string): JsonParseResult => {
-  try {
-    return { ok: true, value: JSON.parse(rawInput) as unknown };
-  } catch {
-    return { ok: false };
-  }
 };
