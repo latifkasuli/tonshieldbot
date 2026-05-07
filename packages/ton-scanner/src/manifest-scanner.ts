@@ -2,8 +2,8 @@ import { createFinding, getCoreRule } from "@tonshield/risk-engine";
 import type { RiskFinding } from "@tonshield/shared";
 import type { FetchCache } from "@tonshield/safe-fetch";
 import { safeFetch } from "@tonshield/safe-fetch";
-import { detectDomainImpersonation, detectNameImpersonation } from "./impersonation.ts";
-import { checkManifestIdentity, parseTonConnectManifest } from "./manifest.ts";
+import { scanManifestIdentity } from "./manifest-identity.ts";
+import { parseTonConnectManifest } from "./manifest.ts";
 import type { TonConnectManifest } from "./manifest.ts";
 
 const JSON_CONTENT_TYPES = /^(?:application\/json|application\/[\w.+-]+\+json)(?:\s*;|$)/i;
@@ -78,74 +78,10 @@ export const scanTonConnectManifest = async (
   }
 
   const manifest = parseResult.value;
-  findings.push(...scanManifestIdentity(manifestUrl, manifest));
+  findings.push(...scanManifestIdentity(manifestUrl, fetchResult.value.finalUrl, manifest));
 
   return { findings, manifest };
 };
 
 const isAcceptableManifestContent = (contentType: string | null): boolean =>
   contentType === null || JSON_CONTENT_TYPES.test(contentType);
-
-const scanManifestIdentity = (
-  manifestUrl: URL,
-  manifest: TonConnectManifest,
-): readonly RiskFinding[] => {
-  const findings: RiskFinding[] = [];
-  const identity = checkManifestIdentity(manifestUrl, manifest);
-
-  if (identity.hasOriginMismatch) {
-    findings.push(
-      createFinding({
-        confidence: "high",
-        evidence: {
-          declaredAppOrigin: identity.declaredAppOrigin,
-          manifestOrigin: identity.manifestOrigin,
-        },
-        rule: getCoreRule("TONCONNECT_MANIFEST_ORIGIN_MISMATCH"),
-      }),
-    );
-  }
-
-  const domainMatches = [
-    { hostname: manifestUrl.hostname, source: "manifest_url" },
-    { hostname: manifest.url.hostname, source: "declared_app_url" },
-  ] as const;
-
-  for (const candidate of domainMatches) {
-    const match = detectDomainImpersonation(candidate.hostname);
-
-    if (match !== null) {
-      findings.push(
-        createFinding({
-          confidence: match.confidence,
-          evidence: {
-            hostname: candidate.hostname,
-            matchKind: match.matchKind,
-            source: candidate.source,
-            suspectedProject: match.project.displayName,
-          },
-          rule: getCoreRule("TONCONNECT_PROJECT_IMPERSONATION"),
-        }),
-      );
-    }
-  }
-
-  const nameMatch = detectNameImpersonation(manifest.name, manifestUrl.hostname);
-
-  if (nameMatch !== null) {
-    findings.push(
-      createFinding({
-        confidence: nameMatch.confidence,
-        evidence: {
-          claimedName: manifest.name,
-          hostingDomain: manifestUrl.hostname,
-          matchKind: nameMatch.matchKind,
-          suspectedProject: nameMatch.project.displayName,
-        },
-        rule: getCoreRule("TONCONNECT_PROJECT_IMPERSONATION"),
-      }),
-    );
-  }
-
-  return findings;
-};
