@@ -135,6 +135,12 @@ importers:
 
   packages/shared: {}
 
+  packages/storage:
+    dependencies:
+      '@tonshield/shared':
+        specifier: workspace:*
+        version: link:../shared
+
   packages/ton-scanner:
     dependencies:
       '@ton-api/client':
