@@ -46,6 +46,9 @@ importers:
       "@tonshield/risk-engine":
         specifier: workspace:*
         version: link:../../packages/risk-engine
+      "@tonshield/safe-fetch":
+        specifier: workspace:*
+        version: link:../../packages/safe-fetch
       "@tonshield/shared":
         specifier: workspace:*
         version: link:../../packages/shared
@@ -64,6 +67,9 @@ importers:
       "@tonshield/risk-engine":
         specifier: workspace:*
         version: link:../../packages/risk-engine
+      "@tonshield/safe-fetch":
+        specifier: workspace:*
+        version: link:../../packages/safe-fetch
       "@tonshield/shared":
         specifier: workspace:*
         version: link:../../packages/shared
@@ -117,6 +123,15 @@ importers:
         specifier: workspace:*
         version: link:../shared
 
+  packages/safe-fetch:
+    dependencies:
+      "@tonshield/shared":
+        specifier: workspace:*
+        version: link:../shared
+      undici:
+        specifier: ^8.2.0
+        version: 8.2.0
+
   packages/shared: {}
 
   packages/ton-scanner:
@@ -133,9 +148,15 @@ importers:
       "@tonshield/risk-engine":
         specifier: workspace:*
         version: link:../risk-engine
+      "@tonshield/safe-fetch":
+        specifier: workspace:*
+        version: link:../safe-fetch
       "@tonshield/shared":
         specifier: workspace:*
         version: link:../shared
+      tldts:
+        specifier: ^7.0.30
+        version: 7.0.30
       zod:
         specifier: ^4.4.3
         version: 4.4.3
@@ -2056,6 +2077,19 @@ packages:
       }
     engines: { node: ">=14.0.0" }
 
+  tldts-core@7.0.30:
+    resolution:
+      {
+        integrity: sha512-uiHN8PIB1VmWyS98eZYja4xzlYqeFZVjb4OuYlJQnZAuJhMw4PbKQOKgHKhBdJR3FE/t5mUQ1Kd80++B+qhD1Q==,
+      }
+
+  tldts@7.0.30:
+    resolution:
+      {
+        integrity: sha512-ELrFxuqsDdHUwoh0XxDbxuLD3Wnz49Z57IFvTtvWy1hJdcMZjXLIuonjilCiWHlT2GbE4Wlv1wKVTzDFnXH1aw==,
+      }
+    hasBin: true
+
   tr46@0.0.3:
     resolution:
       {
@@ -2121,6 +2155,13 @@ packages:
       {
         integrity: sha512-Zz+aZWSj8LE6zoxD+xrjh4VfkIG8Ya6LvYkZqtUQGJPZjYl53ypCaUwWqo7eI0x66KBGeRo+mlBEkMSeSZ38Nw==,
       }
+
+  undici@8.2.0:
+    resolution:
+      {
+        integrity: sha512-Z+4Hx9GE26Lh9Upwfnc8C7SsrpBPGaM/Gm6kMFtiG7c+5IvQKlXi/t+9x9DrrCh29cww5TSP9YdVaBcnLDs5fQ==,
+      }
+    engines: { node: ">=22.19.0" }
 
   uri-js@4.4.1:
     resolution:
@@ -3347,6 +3388,12 @@ snapshots:
 
   tinyrainbow@3.1.0: {}
 
+  tldts-core@7.0.30: {}
+
+  tldts@7.0.30:
+    dependencies:
+      tldts-core: 7.0.30
+
   tr46@0.0.3: {}
 
   ts-api-utils@2.5.0(typescript@6.0.3):
@@ -3382,6 +3429,8 @@ snapshots:
   typescript@6.0.3: {}
 
   undici-types@7.16.0: {}
+
+  undici@8.2.0: {}
 
   uri-js@4.4.1:
     dependencies:

@@ -1,11 +1,12 @@
-import { randomUUID } from "node:crypto";
 import { Bot } from "grammy";
+import { TtlFetchCache } from "@tonshield/safe-fetch";
 import { createBasicScan } from "@tonshield/ton-scanner";
 import { loadBotConfig } from "./config.ts";
 import { formatScanReport, welcomeMessage } from "./messages.ts";
 
 const config = loadBotConfig();
 const bot = new Bot(config.token);
+const manifestCache = new TtlFetchCache();
 
 bot.command("start", async (context) => {
   await context.reply(welcomeMessage);
@@ -16,8 +17,8 @@ bot.command("help", async (context) => {
 });
 
 bot.on("message:text", async (context) => {
-  const report = createBasicScan({
-    id: randomUUID(),
+  const report = await createBasicScan({
+    cache: manifestCache,
     rawInput: context.message.text,
   });
 

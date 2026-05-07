@@ -1,5 +1,6 @@
 import type { ScanInput } from "@tonshield/shared";
 import { parseTonConnectLink } from "./ton-connect.ts";
+import { parseUrl } from "./utils.ts";
 
 const telegramHandlePattern = /^@[A-Za-z0-9_]{5,32}$/;
 const rawTonAddressPattern = /^-?\d+:[a-fA-F0-9]{64}$/;
@@ -111,14 +112,6 @@ const classifyUrl = (rawInput: string, url: URL): ScanInput => {
     normalized: url.toString(),
     url,
   };
-};
-
-const parseUrl = (rawInput: string): URL | null => {
-  try {
-    return new URL(rawInput);
-  } catch {
-    return null;
-  }
 };
 
 const parseTransactionJson = (rawInput: string): Readonly<Record<string, unknown>> | null => {

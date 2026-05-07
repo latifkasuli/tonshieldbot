@@ -11,6 +11,7 @@
   "dependencies": {
     "@hono/node-server": "^2.0.1",
     "@tonshield/risk-engine": "workspace:*",
+    "@tonshield/safe-fetch": "workspace:*",
     "@tonshield/shared": "workspace:*",
     "@tonshield/ton-scanner": "workspace:*",
     "hono": "^4.12.18",
