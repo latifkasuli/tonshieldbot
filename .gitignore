@@ -6,6 +6,8 @@ build/
 coverage/
 *.tsbuildinfo
 
+docs/research/
+
 .env
 .env.*
 !.env.example
