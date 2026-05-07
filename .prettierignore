@@ -3,3 +3,6 @@ dist/
 coverage/
 
 docs/research/
+
+# Owned by the package manager; format follows the active pnpm version.
+pnpm-lock.yaml
