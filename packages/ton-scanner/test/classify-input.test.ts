@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { classifyInput } from "../src/index.ts";
+// Import from the module directly rather than the package barrel: the barrel
+// transitively loads `safe-fetch` (and thus `undici`), which breaks under the
+// undici 8.2.0 module-init regression. Direct imports keep this suite isolated.
+import { classifyInput } from "../src/classify-input.ts";
 
 describe("classifyInput", () => {
   it("classifies Telegram handles", () => {
