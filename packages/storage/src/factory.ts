@@ -6,24 +6,34 @@ import {
 import type { ApiKeyStore } from "./interfaces/api-key-store.ts";
 import type { ReportStore } from "./interfaces/report-store.ts";
 import type { TenantStore } from "./interfaces/tenant-store.ts";
+import {
+  createPostgresApiKeyStore,
+  createPostgresClient,
+  createPostgresReportStore,
+  createPostgresTenantStore,
+} from "./postgres/index.ts";
+import type { PostgresClient } from "./postgres/index.ts";
 
 export interface Storage {
   readonly reports: ReportStore;
   readonly apiKeys: ApiKeyStore;
   readonly tenants: TenantStore;
+  /**
+   * Releases any underlying resources (e.g. the Postgres pool). Memory
+   * storage's close is a no-op. Call on app shutdown.
+   */
+  readonly close: () => Promise<void>;
 }
 
 export interface StorageConfig {
   /**
    * Postgres connection string. When set, the factory wires up Postgres-
-   * backed implementations. When unset, the factory returns in-memory
-   * implementations suitable for tests and local dev.
-   *
-   * The Postgres branch is added in a follow-up PR; for now an unsupported
-   * value throws so misconfiguration fails loudly rather than silently
-   * falling back to in-memory in production.
+   * backed implementations. When unset (or empty), the factory returns
+   * in-memory implementations suitable for tests and local dev.
    */
   readonly databaseUrl?: string;
+  /** Override the pool max for the Postgres backend. */
+  readonly poolMax?: number;
 }
 
 /**
@@ -36,15 +46,26 @@ export interface StorageConfig {
  */
 export const createStorage = (config: StorageConfig = {}): Storage => {
   if (config.databaseUrl !== undefined && config.databaseUrl.length > 0) {
-    throw new Error(
-      "Postgres-backed storage is not yet implemented. " +
-        "Unset DATABASE_URL to use in-memory storage, or wait for the Postgres impl PR.",
-    );
+    return createPostgresStorage(config.databaseUrl, config.poolMax);
   }
 
   return {
     reports: createInMemoryReportStore(),
     apiKeys: createInMemoryApiKeyStore(),
     tenants: createInMemoryTenantStore(),
+    close: () => Promise.resolve(),
+  };
+};
+
+const createPostgresStorage = (databaseUrl: string, poolMax: number | undefined): Storage => {
+  const client: PostgresClient = createPostgresClient(
+    poolMax === undefined ? { databaseUrl } : { databaseUrl, poolMax },
+  );
+
+  return {
+    reports: createPostgresReportStore(client.db),
+    apiKeys: createPostgresApiKeyStore(client.db),
+    tenants: createPostgresTenantStore(client.db),
+    close: client.close,
   };
 };

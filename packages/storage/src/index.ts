@@ -21,3 +21,17 @@ export {
 export type { InMemoryApiKeyStoreOptions, InMemoryTenantStoreOptions } from "./memory/index.ts";
 export { createStorage } from "./factory.ts";
 export type { Storage, StorageConfig } from "./factory.ts";
+export {
+  createPostgresApiKeyStore,
+  createPostgresClient,
+  createPostgresReportStore,
+  createPostgresTenantStore,
+  deserializeInput,
+  serializeInput,
+} from "./postgres/index.ts";
+export type {
+  PostgresApiKeyStoreOptions,
+  PostgresClient,
+  PostgresClientConfig,
+  StorageDb,
+} from "./postgres/index.ts";
