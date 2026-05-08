@@ -1,9 +1,25 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { createStorage } from "../src/factory.ts";
+import type { Storage } from "../src/factory.ts";
 
 describe("createStorage", () => {
+  const created: Storage[] = [];
+
+  afterEach(async () => {
+    while (created.length > 0) {
+      const storage = created.pop();
+      await storage?.close();
+    }
+  });
+
+  const make = (config?: Parameters<typeof createStorage>[0]): Storage => {
+    const s = createStorage(config);
+    created.push(s);
+    return s;
+  };
+
   it("returns in-memory stores when no databaseUrl is provided", () => {
-    const storage = createStorage();
+    const storage = make();
 
     expect(storage.reports).toBeDefined();
     expect(storage.apiKeys).toBeDefined();
@@ -11,20 +27,20 @@ describe("createStorage", () => {
   });
 
   it("treats an empty databaseUrl as 'use in-memory'", () => {
-    expect(() => createStorage({ databaseUrl: "" })).not.toThrow();
+    expect(() => make({ databaseUrl: "" })).not.toThrow();
   });
 
-  it("throws loudly when databaseUrl is set but the Postgres impl is not yet built", () => {
-    expect(() => createStorage({ databaseUrl: "postgres://localhost/x" })).toThrow(
-      /Postgres-backed storage is not yet implemented/i,
-    );
-  });
-
-  it("returns independent store instances per call", async () => {
-    const a = createStorage();
-    const b = createStorage();
+  it("returns independent in-memory store instances per call", async () => {
+    const a = make();
+    const b = make();
     await a.tenants.create({ name: "lives in A" });
 
     expect(await b.tenants.list()).toEqual([]);
+  });
+
+  it("memory storage close is a no-op that resolves", async () => {
+    const storage = make();
+
+    await expect(storage.close()).resolves.toBeUndefined();
   });
 });
