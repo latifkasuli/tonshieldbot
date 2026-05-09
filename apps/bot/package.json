@@ -9,6 +9,7 @@
     "typecheck": "tsc -p ../../tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@tonshield/logger": "workspace:*",
     "@tonshield/risk-engine": "workspace:*",
     "@tonshield/safe-fetch": "workspace:*",
     "@tonshield/shared": "workspace:*",

@@ -1,9 +1,11 @@
 import { serve } from "@hono/node-server";
+import { createLogger } from "@tonshield/logger";
 import { loadApiConfig } from "./env.ts";
 import { createApiServer } from "./server.ts";
 
+const logger = createLogger({ service: "tonshield-api" });
 const config = loadApiConfig();
-const app = createApiServer();
+const app = createApiServer({ logger });
 
 serve(
   {
@@ -12,6 +14,6 @@ serve(
     port: config.port,
   },
   (info) => {
-    console.log(`TON Shield API listening on http://${info.address}:${String(info.port)}`);
+    logger.info({ host: info.address, port: info.port }, "api_listening");
   },
 );
