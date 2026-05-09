@@ -118,6 +118,21 @@ importers:
         specifier: ^5.10.1
         version: 5.10.1
 
+  packages/rate-limit:
+    dependencies:
+      '@tonshield/storage':
+        specifier: workspace:*
+        version: link:../storage
+      grammy:
+        specifier: ^1.42.0
+        version: 1.42.0
+      hono:
+        specifier: ^4.12.18
+        version: 4.12.18
+      ioredis:
+        specifier: ^5.10.0
+        version: 5.10.1
+
   packages/risk-engine:
     dependencies:
       '@tonshield/shared':
