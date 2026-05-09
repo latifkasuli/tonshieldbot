@@ -46,6 +46,10 @@ export const createHonoLogger = (
     } finally {
       const elapsedMs = Number(process.hrtime.bigint() - startedAt) / 1_000_000;
       const status = c.res.status;
+      // Downstream middleware may rebind `c.var.log` with auth/tenant fields.
+      // Use the latest logger for completion so the final line carries the
+      // same request-scoped context as handler logs.
+      const completionLog = c.var.log;
       const fields = {
         method: c.req.method,
         path: c.req.path,
@@ -54,11 +58,11 @@ export const createHonoLogger = (
       };
 
       if (status >= 500) {
-        log.error(fields, "request_completed");
+        completionLog.error(fields, "request_completed");
       } else if (status >= 400) {
-        log.warn(fields, "request_completed");
+        completionLog.warn(fields, "request_completed");
       } else {
-        log.info(fields, "request_completed");
+        completionLog.info(fields, "request_completed");
       }
     }
   };

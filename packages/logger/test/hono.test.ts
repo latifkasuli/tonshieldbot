@@ -11,6 +11,7 @@ interface CapturedLog {
   readonly request_id?: string;
   readonly status?: number;
   readonly path?: string;
+  readonly tenant_id?: string;
 }
 
 const buildApp = () => {
@@ -29,6 +30,10 @@ const buildApp = () => {
   const app = new Hono<{ Variables: LoggerVariables }>();
   app.use("*", createHonoLogger({ logger }));
   app.get("/ok", (c) => c.json({ requestId: c.var.requestId }));
+  app.get("/rebind", (c) => {
+    c.set("log", c.var.log.child({ tenant_id: "tenant_1" }));
+    return c.json({ ok: true });
+  });
   app.get("/missing", (c) => c.notFound());
   app.get("/boom", () => {
     throw new Error("boom");
@@ -106,5 +111,14 @@ describe("createHonoLogger", () => {
     const ids = new Set(records.map((r) => r.request_id));
     expect(ids.size).toBe(1);
     expect([...ids][0]).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
+  it("uses a downstream-rebound child logger for request completion", async () => {
+    const { app, records } = buildApp();
+
+    await app.request("/rebind");
+
+    const completed = records.find((r) => r.msg === "request_completed");
+    expect(completed?.tenant_id).toBe("tenant_1");
   });
 });

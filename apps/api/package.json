@@ -10,12 +10,16 @@
   },
   "dependencies": {
     "@hono/node-server": "^2.0.1",
+    "@tonshield/api-auth": "workspace:*",
     "@tonshield/logger": "workspace:*",
+    "@tonshield/rate-limit": "workspace:*",
     "@tonshield/risk-engine": "workspace:*",
     "@tonshield/safe-fetch": "workspace:*",
     "@tonshield/shared": "workspace:*",
+    "@tonshield/storage": "workspace:*",
     "@tonshield/ton-scanner": "workspace:*",
     "hono": "^4.12.18",
+    "ioredis": "^5.10.0",
     "zod": "^4.4.3"
   }
 }
