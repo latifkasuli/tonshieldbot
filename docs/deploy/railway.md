@@ -23,21 +23,44 @@ The web app (`apps/web`) and worker (`apps/worker`) are not deployed yet — web
    - _Config-as-Code Path_: `/apps/api/railway.toml`
    - Required env vars:
      - `API_HOST=0.0.0.0`
+     - `DATABASE_URL` (linked from the Postgres plugin so reports persist and dedupe across requests)
      - (Railway injects `PORT` automatically; the API picks it up — no `API_PORT` needed)
-   - Optional: `NODE_ENV=production`
+   - Optional:
+     - `REDIS_URL` (linked from a Railway Redis plugin if added — otherwise the api uses an in-process token bucket which only works for a single instance)
+     - `NODE_ENV=production`
 4. Create the Bot service from the same repo:
    - _Root Directory_: `/`
    - _Config-as-Code Path_: `/apps/bot/railway.toml`
    - Required env vars:
      - `BOT_TOKEN=<from BotFather>`
-   - Optional: `NODE_ENV=production`
-5. Apply database migrations once before the API/bot start using storage. From a local shell with `DATABASE_URL` pointed at the Railway Postgres:
+     - `DATABASE_URL` (so the bot's scan results land in the same store as the API's, sharing dedup)
+   - Optional:
+     - `REDIS_URL` (per-Telegram-user rate limit; in-process is fine for a single bot instance)
+     - `NODE_ENV=production`
+5. Apply database migrations once before deploying. From a local shell with `DATABASE_URL` pointed at the Railway Postgres:
 
    ```sh
    DATABASE_URL=<railway-postgres-url> pnpm --filter @tonshield/storage migrate:apply
    ```
 
-   Once the api/bot are wired to storage in a later PR, also add `DATABASE_URL` to both services so they read/write reports and API keys.
+6. Create at least one tenant + API key so partners can call `/v1/risk/scan`. There is no admin CLI yet — until one lands, run a one-shot Node script with `DATABASE_URL` set:
+
+   ```sh
+   DATABASE_URL=<railway-postgres-url> pnpm --filter @tonshield/storage exec node \
+     --input-type=module -e '
+       import { createStorage } from "@tonshield/storage";
+       const s = createStorage({ databaseUrl: process.env.DATABASE_URL });
+       const t = await s.tenants.create({ name: "internal" });
+       const k = await s.apiKeys.create({
+         tenantId: t.id, name: "bootstrap",
+         scopes: ["scan:write"], rateLimitTier: "internal",
+       });
+       console.log("RAW KEY (shown once):", k.rawKey);
+       await s.close();
+     '
+   ```
+
+   Save the printed raw key immediately — only its hash is persisted.
 
 ## Build and start
 

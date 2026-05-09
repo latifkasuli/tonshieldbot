@@ -44,9 +44,15 @@ importers:
       '@hono/node-server':
         specifier: ^2.0.1
         version: 2.0.1(hono@4.12.18)
+      '@tonshield/api-auth':
+        specifier: workspace:*
+        version: link:../../packages/api-auth
       '@tonshield/logger':
         specifier: workspace:*
         version: link:../../packages/logger
+      '@tonshield/rate-limit':
+        specifier: workspace:*
+        version: link:../../packages/rate-limit
       '@tonshield/risk-engine':
         specifier: workspace:*
         version: link:../../packages/risk-engine
@@ -56,12 +62,18 @@ importers:
       '@tonshield/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@tonshield/storage':
+        specifier: workspace:*
+        version: link:../../packages/storage
       '@tonshield/ton-scanner':
         specifier: workspace:*
         version: link:../../packages/ton-scanner
       hono:
         specifier: ^4.12.18
         version: 4.12.18
+      ioredis:
+        specifier: ^5.10.0
+        version: 5.10.1
       zod:
         specifier: ^4.4.3
         version: 4.4.3
@@ -71,6 +83,9 @@ importers:
       '@tonshield/logger':
         specifier: workspace:*
         version: link:../../packages/logger
+      '@tonshield/rate-limit':
+        specifier: workspace:*
+        version: link:../../packages/rate-limit
       '@tonshield/risk-engine':
         specifier: workspace:*
         version: link:../../packages/risk-engine
@@ -80,12 +95,18 @@ importers:
       '@tonshield/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@tonshield/storage':
+        specifier: workspace:*
+        version: link:../../packages/storage
       '@tonshield/ton-scanner':
         specifier: workspace:*
         version: link:../../packages/ton-scanner
       grammy:
         specifier: ^1.42.0
         version: 1.42.0
+      ioredis:
+        specifier: ^5.10.0
+        version: 5.10.1
       zod:
         specifier: ^4.4.3
         version: 4.4.3

@@ -1,20 +1,35 @@
 import { Bot } from "grammy";
 import type { Context } from "grammy";
-import { createGrammyLogger, createLogger } from "@tonshield/logger";
+import { createGrammyLogger } from "@tonshield/logger";
 import type { LoggerFlavor } from "@tonshield/logger";
+import { createGrammyRateLimit, defaultTierLimits } from "@tonshield/rate-limit";
 import { TtlFetchCache } from "@tonshield/safe-fetch";
-import { createBasicScan } from "@tonshield/ton-scanner";
+import { canonicalInputHash } from "@tonshield/storage";
+import { classifyInput, createBasicScan } from "@tonshield/ton-scanner";
 import { loadBotConfig } from "./config.ts";
+import { createBotDependencies } from "./deps.ts";
 import { formatScanReport, welcomeMessage } from "./messages.ts";
 
 type BotContext = Context & LoggerFlavor;
 
-const logger = createLogger({ service: "tonshield-bot" });
 const config = loadBotConfig();
+const deps = createBotDependencies(config);
 const bot = new Bot<BotContext>(config.token);
 const manifestCache = new TtlFetchCache();
 
-bot.use(createGrammyLogger<BotContext>({ logger }));
+bot.use(createGrammyLogger<BotContext>({ logger: deps.logger }));
+
+bot.use(
+  createGrammyRateLimit<BotContext>({
+    limiter: deps.rateLimiter,
+    tiers: defaultTierLimits,
+    onLimit: async (ctx, decision) => {
+      const seconds = Math.max(1, Math.ceil(decision.retryAfterMs / 1000));
+      ctx.log.warn({ retry_after_ms: decision.retryAfterMs }, "rate_limited");
+      await ctx.reply(`You are sending requests too fast. Try again in ${String(seconds)}s.`);
+    },
+  }),
+);
 
 bot.command("start", async (ctx) => {
   await ctx.reply(welcomeMessage);
@@ -25,15 +40,32 @@ bot.command("help", async (ctx) => {
 });
 
 bot.on("message:text", async (ctx) => {
-  const report = await createBasicScan({
-    cache: manifestCache,
-    rawInput: ctx.message.text,
-  });
+  const rawInput = ctx.message.text;
+  const classified = classifyInput(rawInput);
+  const inputHash = canonicalInputHash(classified);
+  const cached = await deps.storage.reports.findByInputHash(inputHash);
 
-  ctx.log.info(
-    { verdict: report.verdict, risk_score: report.riskScore, input_kind: report.input.kind },
-    "scan_completed",
-  );
+  let report;
+
+  if (cached !== null) {
+    ctx.log.info(
+      { input_kind: cached.input.kind, verdict: cached.verdict, dedup_hit: true },
+      "scan_resolved",
+    );
+    report = cached;
+  } else {
+    const fresh = await createBasicScan({ cache: manifestCache, rawInput });
+    report = await deps.storage.reports.save(fresh);
+    ctx.log.info(
+      {
+        input_kind: report.input.kind,
+        verdict: report.verdict,
+        risk_score: report.riskScore,
+        dedup_hit: report.id !== fresh.id,
+      },
+      "scan_resolved",
+    );
+  }
 
   await ctx.reply(formatScanReport(report), {
     link_preview_options: {
@@ -43,16 +75,25 @@ bot.on("message:text", async (ctx) => {
 });
 
 bot.catch((err) => {
-  // Errors that escape the per-update logger middleware land here. The
-  // grammy ErrorHandler exposes the original update on err.ctx so we can
-  // still tag the log with whatever request_id the middleware assigned.
-  // err.ctx is already typed as BotContext via the Bot<BotContext> generic,
-  // so the requestId field is in scope without a cast.
-  logger.error({ err: err.error, request_id: err.ctx.requestId }, "bot_error");
+  deps.logger.error({ err: err.error, request_id: err.ctx.requestId }, "bot_error");
+});
+
+const shutdown = async (signal: string): Promise<void> => {
+  deps.logger.info({ signal }, "bot_shutting_down");
+  await bot.stop();
+  await deps.close();
+  process.exit(0);
+};
+
+process.on("SIGTERM", () => {
+  void shutdown("SIGTERM");
+});
+process.on("SIGINT", () => {
+  void shutdown("SIGINT");
 });
 
 await bot.start({
   onStart: (botInfo) => {
-    logger.info({ username: botInfo.username }, "bot_started");
+    deps.logger.info({ username: botInfo.username }, "bot_started");
   },
 });
