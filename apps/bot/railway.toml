@@ -1,0 +1,19 @@
+# Railway service config for the TON Shield Telegram bot.
+#
+# Pointed at via Railway's "Config-as-Code Path" service setting:
+#     /apps/bot/railway.toml
+#
+# The Railway service's "Root Directory" should remain the repo root so the
+# pnpm workspace install resolves correctly. Railpack auto-detects pnpm from
+# `packageManager` in the root package.json and Node 24 from `engines.node`.
+#
+# The bot uses Telegram long-polling — no public port and no HTTP healthcheck.
+# Railway falls back to process liveness as the health signal.
+
+[build]
+builder = "RAILPACK"
+
+[deploy]
+startCommand = "pnpm --filter @tonshield/bot start"
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
