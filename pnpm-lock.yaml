@@ -118,6 +118,15 @@ importers:
         specifier: ^5.10.1
         version: 5.10.1
 
+  packages/api-auth:
+    dependencies:
+      '@tonshield/storage':
+        specifier: workspace:*
+        version: link:../storage
+      hono:
+        specifier: ^4.12.18
+        version: 4.12.18
+
   packages/rate-limit:
     dependencies:
       '@tonshield/storage':
