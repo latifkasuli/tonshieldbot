@@ -43,24 +43,15 @@ The web app (`apps/web`) and worker (`apps/worker`) are not deployed yet — web
    DATABASE_URL=<railway-postgres-url> pnpm --filter @tonshield/storage migrate:apply
    ```
 
-6. Create at least one tenant + API key so partners can call `/v1/risk/scan`. There is no admin CLI yet — until one lands, run a one-shot Node script with `DATABASE_URL` set:
+6. Create at least one tenant + API key so partners can call `/v1/risk/scan`:
 
    ```sh
-   DATABASE_URL=<railway-postgres-url> pnpm --filter @tonshield/storage exec node \
-     --input-type=module -e '
-       import { createStorage } from "@tonshield/storage";
-       const s = createStorage({ databaseUrl: process.env.DATABASE_URL });
-       const t = await s.tenants.create({ name: "internal" });
-       const k = await s.apiKeys.create({
-         tenantId: t.id, name: "bootstrap",
-         scopes: ["scan:write"], rateLimitTier: "internal",
-       });
-       console.log("RAW KEY (shown once):", k.rawKey);
-       await s.close();
-     '
+   DATABASE_URL=<railway-postgres-url> pnpm --filter @tonshield/storage bootstrap \
+     --tenant internal --name bootstrap --scopes scan:write --tier internal
    ```
 
    Save the printed raw key immediately — only its hash is persisted.
+   Run `pnpm --filter @tonshield/storage bootstrap --help` for all options.
 
 ## Build and start
 

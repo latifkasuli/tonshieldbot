@@ -15,10 +15,12 @@
     "typecheck": "tsc -p ../../tsconfig.json --noEmit",
     "test": "vitest run",
     "migrate:generate": "drizzle-kit generate",
-    "migrate:apply": "drizzle-kit migrate"
+    "migrate:apply": "drizzle-kit migrate",
+    "bootstrap": "tsx scripts/bootstrap.ts"
   },
   "devDependencies": {
     "@types/pg": "^8.20.0",
-    "drizzle-kit": "^0.31.10"
+    "drizzle-kit": "^0.31.10",
+    "tsx": "^4.21.0"
   }
 }
