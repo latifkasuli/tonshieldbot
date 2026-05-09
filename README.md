@@ -32,3 +32,7 @@ pnpm dev:web
 ```
 
 The bot requires `BOT_TOKEN` in the environment.
+
+## Deployment
+
+See [docs/deploy/railway.md](docs/deploy/railway.md) for the Railway setup: per-service config, env vars, and migration workflow.
