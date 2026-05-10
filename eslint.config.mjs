@@ -9,6 +9,8 @@ export default tseslint.config(
       "node_modules/**",
       ".claude/**",
       ".claire/**",
+      // Per-package smoke-test scripts; gitignored, run ad hoc, never type-checked
+      "packages/*/.smoke/**",
       "apps/web/dist/**",
       "eslint.config.mjs",
       "pnpm-lock.yaml",
