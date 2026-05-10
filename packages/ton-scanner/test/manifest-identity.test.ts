@@ -19,16 +19,21 @@ describe("scanManifestIdentity", () => {
     expect(findings).toEqual([]);
   });
 
-  it("flags a same-origin manifest that declares a different app origin", () => {
+  it("flags a manifest hosted off the declared app's registrable domain (no redirect) as EXTERNAL_HOST low", () => {
+    // Was previously `TONCONNECT_MANIFEST_ORIGIN_MISMATCH` (high). The SDK
+    // allows hosting the manifest on any host; without a cross-origin
+    // redirect, this is the lower-severity "external host" signal.
     const manifestUrl = new URL("https://example.com/tonconnect-manifest.json");
     const manifest = buildManifest({ url: new URL("https://other.example") });
 
     const findings = scanManifestIdentity(manifestUrl, manifestUrl, manifest);
 
     expect(findings).toHaveLength(1);
-    expect(findings[0]?.ruleId).toBe("TONCONNECT_MANIFEST_ORIGIN_MISMATCH");
+    expect(findings[0]?.ruleId).toBe("TONCONNECT_MANIFEST_EXTERNAL_HOST");
     expect(findings[0]?.evidence).toMatchObject({
       declaredAppOrigin: "https://other.example",
+      declaredRegistrableDomain: "other.example",
+      finalRegistrableDomain: "example.com",
       followedCrossOriginRedirect: false,
       inputOrigin: "https://example.com",
       manifestOrigin: "https://example.com",
@@ -121,5 +126,96 @@ describe("scanManifestIdentity", () => {
 
     expect(nameMatch).toBeDefined();
     expect(nameMatch?.evidence.hostingDomain).toBe("attacker.example");
+  });
+});
+
+// ── registrable-domain origin policy ─────────────────────────────────────────
+
+describe("scanManifestIdentity registrable-domain policy", () => {
+  it("does NOT flag DeDust (manifest on app.dedust.io claiming dedust.io)", () => {
+    // Real-world case from production smoke tests. Same registrable domain
+    // (dedust.io) — common SPA pattern where the wallet-connecting code lives
+    // on `app.X` and the marketing site is at the apex.
+    const manifestUrl = new URL("https://app.dedust.io/tonconnect-manifest.json");
+    const manifest = buildManifest({ url: new URL("https://dedust.io") });
+
+    const findings = scanManifestIdentity(manifestUrl, manifestUrl, manifest);
+
+    expect(findings.some((f) => f.ruleId === "TONCONNECT_MANIFEST_ORIGIN_MISMATCH")).toBe(false);
+    expect(findings.some((f) => f.ruleId === "TONCONNECT_MANIFEST_EXTERNAL_HOST")).toBe(false);
+  });
+
+  it("treats www and apex as same registrable domain", () => {
+    const manifestUrl = new URL("https://www.example.com/tonconnect-manifest.json");
+    const manifest = buildManifest({ url: new URL("https://example.com") });
+
+    const findings = scanManifestIdentity(manifestUrl, manifestUrl, manifest);
+
+    expect(findings).toEqual([]);
+  });
+
+  it("treats app.example.co.uk and example.co.uk as same registrable domain (multi-part TLD)", () => {
+    const manifestUrl = new URL("https://app.example.co.uk/tonconnect-manifest.json");
+    const manifest = buildManifest({ url: new URL("https://example.co.uk") });
+
+    const findings = scanManifestIdentity(manifestUrl, manifestUrl, manifest);
+
+    expect(findings).toEqual([]);
+  });
+
+  it("emits EXTERNAL_HOST (low) for a manifest on a CDN-style host with no redirect", () => {
+    const manifestUrl = new URL("https://manifests.cloud-cdn.example/tonconnect-manifest.json");
+    const manifest = buildManifest({ url: new URL("https://realapp.example") });
+
+    const findings = scanManifestIdentity(manifestUrl, manifestUrl, manifest);
+
+    const external = findings.find((f) => f.ruleId === "TONCONNECT_MANIFEST_EXTERNAL_HOST");
+    const high = findings.find((f) => f.ruleId === "TONCONNECT_MANIFEST_ORIGIN_MISMATCH");
+
+    expect(external).toBeDefined();
+    expect(high).toBeUndefined();
+    expect(external?.severity).toBe("low");
+  });
+
+  it("emits high ORIGIN_MISMATCH on cross-registrable-domain redirect to attacker", () => {
+    // Input is on the legit app's registrable domain. Server redirects to a
+    // foreign RD. Manifest claims the legit app. This is the redirect-attack
+    // shape — security regression test for PR #2.
+    const manifestUrl = new URL("https://realapp.example/tonconnect-manifest.json");
+    const finalUrl = new URL("https://attacker.different/tonconnect-manifest.json");
+    const manifest = buildManifest({ url: new URL("https://realapp.example") });
+
+    const findings = scanManifestIdentity(manifestUrl, finalUrl, manifest);
+
+    const high = findings.find((f) => f.ruleId === "TONCONNECT_MANIFEST_ORIGIN_MISMATCH");
+
+    expect(high).toBeDefined();
+    expect(high?.evidence).toMatchObject({
+      followedCrossOriginRedirect: true,
+      finalRegistrableDomain: "attacker.different",
+      declaredRegistrableDomain: "realapp.example",
+    });
+  });
+
+  it("does not emit EXTERNAL_HOST when there's also a high mismatch (no double-flagging)", () => {
+    const manifestUrl = new URL("https://realapp.example/tonconnect-manifest.json");
+    const finalUrl = new URL("https://attacker.different/tonconnect-manifest.json");
+    const manifest = buildManifest({ url: new URL("https://realapp.example") });
+
+    const findings = scanManifestIdentity(manifestUrl, finalUrl, manifest);
+
+    expect(findings.some((f) => f.ruleId === "TONCONNECT_MANIFEST_EXTERNAL_HOST")).toBe(false);
+  });
+
+  it("falls back to high ORIGIN_MISMATCH when registrable domain is unparseable (raw IP host)", () => {
+    // Defensive: if tldts can't extract a registrable domain (e.g. raw IPs,
+    // single-label hosts), treat it as a hard mismatch rather than silently
+    // allowing it.
+    const manifestUrl = new URL("https://192.0.2.1/tonconnect-manifest.json");
+    const manifest = buildManifest({ url: new URL("https://realapp.example") });
+
+    const findings = scanManifestIdentity(manifestUrl, manifestUrl, manifest);
+
+    expect(findings.some((f) => f.ruleId === "TONCONNECT_MANIFEST_ORIGIN_MISMATCH")).toBe(true);
   });
 });

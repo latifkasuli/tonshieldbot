@@ -16,10 +16,22 @@ export const coreRules = [
     category: "tonconnect",
     severity: "high",
     title: "TON Connect manifest origin mismatch",
-    description: "The manifest is hosted on one origin but claims a different app URL.",
+    description:
+      "The manifest is served from a different registrable domain than the declared app URL after a cross-origin redirect.",
     recommendation:
       "Do not connect unless the app identity is verified through an official source.",
     defaultScoreDelta: 45,
+  },
+  {
+    id: "TONCONNECT_MANIFEST_EXTERNAL_HOST",
+    category: "tonconnect",
+    severity: "low",
+    title: "Manifest hosted on a different registrable domain than the app",
+    description:
+      "The TON Connect SDK allows hosting the manifest on any host, including a CDN that does not match the declared app URL. This is not a protocol violation, but is worth noting.",
+    recommendation:
+      "Verify the app identity through an official source before connecting if you do not recognize the manifest host.",
+    defaultScoreDelta: 10,
   },
   {
     id: "TONCONNECT_MANIFEST_URL_INVALID",

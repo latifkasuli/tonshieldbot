@@ -115,7 +115,10 @@ describe("scanTonConnectManifest content-type handling", () => {
 // ── identity scanning still runs ─────────────────────────────────────────────
 
 describe("scanTonConnectManifest identity scanning", () => {
-  it("runs origin-mismatch check on a valid manifest with non-standard content-type", async () => {
+  it("runs identity check on a valid manifest with non-standard content-type", async () => {
+    // Fixture has different registrable domains and no redirect, so the
+    // expected identity finding is EXTERNAL_HOST (low). The point is to prove
+    // identity scanning runs at all when content-type is non-JSON.
     const body = JSON.stringify({
       url: "https://different-origin.example",
       name: "Example",
@@ -124,7 +127,7 @@ describe("scanTonConnectManifest identity scanning", () => {
     const cache = seedCache(MANIFEST_URL, body, "text/html");
     const result = await scanTonConnectManifest(MANIFEST_URL, cache);
 
-    expect(ruleIds(result.findings)).toContain("TONCONNECT_MANIFEST_ORIGIN_MISMATCH");
+    expect(ruleIds(result.findings)).toContain("TONCONNECT_MANIFEST_EXTERNAL_HOST");
     expect(ruleIds(result.findings)).not.toContain("TONCONNECT_MANIFEST_CONTENT_SUSPICIOUS");
   });
 });
