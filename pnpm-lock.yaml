@@ -288,6 +288,12 @@ importers:
       '@tonshield/shared':
         specifier: workspace:*
         version: link:../shared
+      '@tonshield/storage':
+        specifier: workspace:*
+        version: link:../storage
+      '@tonshield/telegram-intel':
+        specifier: workspace:*
+        version: link:../telegram-intel
       '@tonshield/ton-emulator':
         specifier: workspace:*
         version: link:../ton-emulator

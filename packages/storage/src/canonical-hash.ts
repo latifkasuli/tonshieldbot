@@ -36,6 +36,28 @@ const canonicalizeInput = (input: ScanInput): CanonicalInput => {
       // we keep it as-is. URL.toString() already normalizes the rest.
       return { kind: input.kind, key: { url: input.url.toString().toLowerCase() } };
 
+    case "telegram_deeplink":
+      // Two deep links targeting the same bot+action+payload should hit the
+      // same cache slot — but cache bypass for telegram_* kinds means this
+      // is informational. We canonicalise on (target, action, appShortName,
+      // payload) so even if the URL grammar varies (case, query order) the
+      // dedup key stays stable.
+      return {
+        kind: input.kind,
+        key: {
+          target: input.target ?? "",
+          action: input.action,
+          appShortName: input.appShortName ?? "",
+          payload: input.payload ?? "",
+        },
+      };
+
+    case "telegram_miniapp_url":
+      return { kind: input.kind, key: { url: input.url.toString().toLowerCase() } };
+
+    case "telegram_nft_link":
+      return { kind: input.kind, key: { slug: input.slug.toLowerCase() } };
+
     case "tonconnect_link":
       // Drop requestId/returnStrategy: same manifest, same report.
       return { kind: input.kind, key: { manifestUrl: input.manifestUrl.toString() } };

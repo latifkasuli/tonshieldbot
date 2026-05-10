@@ -8,6 +8,13 @@
       "when": 1778199407013,
       "tag": "0000_initial",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1778454680474,
+      "tag": "0001_telegram_intel_snapshots",
+      "breakpoints": true
     }
   ]
 }

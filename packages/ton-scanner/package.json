@@ -13,6 +13,8 @@
     "@tonshield/risk-engine": "workspace:*",
     "@tonshield/safe-fetch": "workspace:*",
     "@tonshield/shared": "workspace:*",
+    "@tonshield/storage": "workspace:*",
+    "@tonshield/telegram-intel": "workspace:*",
     "@tonshield/ton-emulator": "workspace:*",
     "tldts": "^7.0.30",
     "zod": "^4.4.3"

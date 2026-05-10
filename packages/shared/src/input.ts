@@ -1,6 +1,9 @@
 export const scanInputKinds = [
   "telegram_handle",
   "telegram_url",
+  "telegram_deeplink",
+  "telegram_miniapp_url",
+  "telegram_nft_link",
   "tonconnect_link",
   "manifest_url",
   "generic_url",
@@ -27,6 +30,71 @@ export interface TelegramUrlInput extends BaseScanInput {
   readonly kind: "telegram_url";
   readonly url: URL;
   readonly handle: string | null;
+}
+
+/**
+ * Telegram deep link with start-payload semantics. Distinguishes the
+ * `start`/`startapp`/`startattach`/`startgroup`/`startchannel`/`startbusiness`
+ * action carried by the URL from a plain channel link. See
+ * <https://core.telegram.org/api/links> for the canonical grammar.
+ *
+ * Examples:
+ *   - `t.me/somebot?start=abc` → action="start", bot="somebot", payload="abc"
+ *   - `t.me/somebot?startapp=foo&mode=fullscreen` → action="startapp"
+ *   - `t.me/somebot/someapp?startapp=foo` → action="startapp", appShortName="someapp"
+ *   - `tg://addBusinessBot?...` → action="addBusinessBot", payload encodes rights
+ */
+export interface TelegramDeeplinkInput extends BaseScanInput {
+  readonly kind: "telegram_deeplink";
+  /** Original URL preserved for evidence. */
+  readonly url: URL;
+  /** Which action the deep link is requesting. */
+  readonly action:
+    | "start"
+    | "startapp"
+    | "startattach"
+    | "startgroup"
+    | "startchannel"
+    | "startbusiness"
+    | "addBusinessBot";
+  /** The bot/peer this deep link targets, where applicable (without leading `@`). */
+  readonly target: string | null;
+  /** App short-name for `t.me/<bot>/<app>?startapp=...` style links. */
+  readonly appShortName: string | null;
+  /** The action-specific payload string (the right-hand side of the `start*=` query). */
+  readonly payload: string | null;
+}
+
+/**
+ * A direct Mini App URL — the page that loads in the Telegram WebView once
+ * a Mini App is launched. These are NOT `t.me` URLs; they are the dApp's
+ * own hosting. We classify them separately from `generic_url` so the
+ * Telegram Mini App content scanner (PR-5) can apply its multilingual
+ * lure-keyword set rather than the generic web-URL handling.
+ *
+ * Classification is conservative: a URL is only `telegram_miniapp_url` when
+ * it was reached via a deep-link or forwarded message that proves the Mini
+ * App context. Plain web URLs remain `generic_url` even if their content
+ * happens to embed Telegram's Mini App SDK — we don't statically guess at
+ * intent.
+ */
+export interface TelegramMiniappUrlInput extends BaseScanInput {
+  readonly kind: "telegram_miniapp_url";
+  readonly url: URL;
+  /** The bot username that owns the Mini App, when discoverable from context. */
+  readonly hostBot: string | null;
+}
+
+/**
+ * `t.me/nft/<UniqueGift.name>` link — a Fragment-issued collectible gift
+ * reference. Classified separately so the gift scanner (PR-6) can cross-
+ * reference the slug against `getAvailableGifts` and the publisher registry.
+ */
+export interface TelegramNftLinkInput extends BaseScanInput {
+  readonly kind: "telegram_nft_link";
+  readonly url: URL;
+  /** The UniqueGift slug after `t.me/nft/`. */
+  readonly slug: string;
 }
 
 export interface TonConnectLinkInput extends BaseScanInput {
@@ -69,6 +137,9 @@ export interface UnknownInput extends BaseScanInput {
 export type ScanInput =
   | TelegramHandleInput
   | TelegramUrlInput
+  | TelegramDeeplinkInput
+  | TelegramMiniappUrlInput
+  | TelegramNftLinkInput
   | TonConnectLinkInput
   | ManifestUrlInput
   | GenericUrlInput

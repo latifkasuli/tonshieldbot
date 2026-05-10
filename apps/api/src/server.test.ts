@@ -4,9 +4,11 @@ import { createInMemoryRateLimiter, defaultTierLimits } from "@tonshield/rate-li
 import {
   createInMemoryApiKeyStore,
   createInMemoryReportStore,
+  createInMemoryTelegramEntityStore,
   createInMemoryTenantStore,
 } from "@tonshield/storage";
 import type { ApiKeyScope, ApiKeyStore, ReportStore } from "@tonshield/storage";
+import { createTelegramIntelClient } from "@tonshield/telegram-intel";
 import { createTonEmulatorClient } from "@tonshield/ton-emulator";
 import { createApiServer } from "./server.ts";
 
@@ -45,12 +47,23 @@ const buildApp = async (
   // which existing assertions already tolerate.
   const emulator = createTonEmulatorClient({ apiKey: null, baseUrl: "https://tonapi.io" });
 
+  // M3: same fail-soft posture for the Telegram intel client. Tests don't
+  // set a token; Telegram-shaped scans surface
+  // `TELEGRAM_BOT_API_NOT_CONFIGURED`.
+  const telegramIntel = createTelegramIntelClient({
+    token: null,
+    apiBaseUrl: "https://api.telegram.org",
+  });
+  const telegramEntities = createInMemoryTelegramEntityStore();
+
   const app = createApiServer({
     logger,
     apiKeys,
     reports,
     rateLimiter: createInMemoryRateLimiter(),
     emulator,
+    telegramIntel,
+    telegramEntities,
   });
 
   return { app, apiKeys, reports, rawKey: options.rawKey ?? "tsk_test_key" };

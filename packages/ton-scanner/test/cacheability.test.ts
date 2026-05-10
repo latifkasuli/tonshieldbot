@@ -60,6 +60,71 @@ describe("isScanResultCacheable", () => {
     expect(isScanResultCacheable(bocInput(), { emulatorEnabled: true })).toBe(false);
   });
 
+  // M3 PR-2: cache bypass for Telegram-shaped inputs when intel is on.
+
+  const telegramHandleInput = (): ScanInput => ({
+    kind: "telegram_handle",
+    raw: "@somehandle",
+    normalized: "@somehandle",
+    handle: "@somehandle",
+  });
+
+  const telegramUrlInput = (): ScanInput => ({
+    kind: "telegram_url",
+    raw: "https://t.me/somechannel",
+    normalized: "https://t.me/somechannel",
+    url: new URL("https://t.me/somechannel"),
+    handle: "somechannel",
+  });
+
+  const telegramDeeplinkInput = (): ScanInput => ({
+    kind: "telegram_deeplink",
+    raw: "https://t.me/somebot?startapp=foo",
+    normalized: "https://t.me/somebot?startapp=foo",
+    url: new URL("https://t.me/somebot?startapp=foo"),
+    action: "startapp",
+    target: "somebot",
+    appShortName: null,
+    payload: "foo",
+  });
+
+  it("returns true for telegram_handle when telegramIntelEnabled is false (no live state to invalidate)", () => {
+    expect(
+      isScanResultCacheable(telegramHandleInput(), {
+        emulatorEnabled: false,
+        telegramIntelEnabled: false,
+      }),
+    ).toBe(true);
+  });
+
+  it("returns false for telegram_handle when telegramIntelEnabled is true (state-dependent)", () => {
+    expect(
+      isScanResultCacheable(telegramHandleInput(), {
+        emulatorEnabled: false,
+        telegramIntelEnabled: true,
+      }),
+    ).toBe(false);
+  });
+
+  it("returns false for telegram_url and telegram_deeplink when telegramIntelEnabled is true", () => {
+    expect(
+      isScanResultCacheable(telegramUrlInput(), {
+        emulatorEnabled: false,
+        telegramIntelEnabled: true,
+      }),
+    ).toBe(false);
+    expect(
+      isScanResultCacheable(telegramDeeplinkInput(), {
+        emulatorEnabled: false,
+        telegramIntelEnabled: true,
+      }),
+    ).toBe(false);
+  });
+
+  it("defaults telegramIntelEnabled to undefined (treated as false) when omitted", () => {
+    expect(isScanResultCacheable(telegramHandleInput(), { emulatorEnabled: false })).toBe(true);
+  });
+
   it("returns true for unknown inputs regardless of emulator state", () => {
     expect(isScanResultCacheable(unknownInput(), { emulatorEnabled: false })).toBe(true);
     expect(isScanResultCacheable(unknownInput(), { emulatorEnabled: true })).toBe(true);

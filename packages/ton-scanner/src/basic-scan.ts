@@ -9,10 +9,13 @@ import {
 } from "@tonshield/risk-engine";
 import type { ActionPreview, RiskFinding, ScanInput, ScanReport } from "@tonshield/shared";
 import type { FetchCache } from "@tonshield/safe-fetch";
+import type { TelegramEntityStore } from "@tonshield/storage";
+import type { TelegramIntelClient } from "@tonshield/telegram-intel";
 import type { TonEmulatorClient } from "@tonshield/ton-emulator";
 import { scanBocWithEmulation } from "./boc/scanner.ts";
 import { classifyInput } from "./classify-input.ts";
 import { scanTonConnectManifest } from "./manifest-scanner.ts";
+import { scanTelegramEntity } from "./telegram/scanner.ts";
 import { scanTransactionJson } from "./transaction/scanner.ts";
 import { scanTransactionWithEmulation } from "./transaction/emulation-scanner.ts";
 
@@ -34,6 +37,19 @@ export interface CreateBasicScanInput {
    * `EMULATION_NOT_CONFIGURED` so the omission is visible to operators.
    */
   readonly emulator?: TonEmulatorClient;
+  /**
+   * Optional Telegram Bot API intel client. When provided AND
+   * `client.enabled` (i.e. `TELEGRAM_INTEL_BOT_TOKEN` was set), Telegram-
+   * shaped inputs get live Bot API enrichment. When absent or disabled,
+   * scans surface `TELEGRAM_BOT_API_NOT_CONFIGURED`.
+   */
+  readonly telegramIntel?: TelegramIntelClient;
+  /**
+   * Telegram entity snapshot store. Required for any Telegram-shaped
+   * scan. In production this comes from `storage.telegramEntities`;
+   * tests can pass an in-memory store directly.
+   */
+  readonly telegramEntities?: TelegramEntityStore;
 }
 
 interface GatherResult {
@@ -49,6 +65,9 @@ export const createBasicScan = async (input: CreateBasicScanInput): Promise<Scan
   const deps: GatherDeps = {
     ...(input.cache === undefined ? {} : { cache: input.cache }),
     ...(input.emulator === undefined ? {} : { emulator: input.emulator }),
+    ...(input.telegramIntel === undefined ? {} : { telegramIntel: input.telegramIntel }),
+    ...(input.telegramEntities === undefined ? {} : { telegramEntities: input.telegramEntities }),
+    ...(input.now === undefined ? {} : { now: input.now }),
   };
   const { findings, actions } = await gatherScanResult(classifiedInput, deps);
   const riskScore = scoreFindings(findings);
@@ -72,6 +91,9 @@ export const createBasicScan = async (input: CreateBasicScanInput): Promise<Scan
 interface GatherDeps {
   readonly cache?: FetchCache;
   readonly emulator?: TonEmulatorClient;
+  readonly telegramIntel?: TelegramIntelClient;
+  readonly telegramEntities?: TelegramEntityStore;
+  readonly now?: Date;
 }
 
 const gatherScanResult = async (input: ScanInput, deps: GatherDeps): Promise<GatherResult> => {
@@ -144,7 +166,69 @@ const gatherScanResult = async (input: ScanInput, deps: GatherDeps): Promise<Gat
     return { findings: bocResult.findings, actions: bocResult.actions };
   }
 
+  // M3 PR-2: Telegram-shaped inputs. The scanner needs a snapshot store;
+  // when it's absent (callers haven't wired it yet), we return an empty
+  // result — same fail-soft posture as the rest of the gather pipeline.
+  if (
+    input.kind === "telegram_handle" ||
+    input.kind === "telegram_url" ||
+    input.kind === "telegram_deeplink"
+  ) {
+    if (deps.telegramEntities === undefined) {
+      return { findings: [], actions: [] };
+    }
+
+    const scanInput = telegramScanInputFor(input);
+    if (scanInput === null) {
+      return { findings: [], actions: [] };
+    }
+
+    const result = await scanTelegramEntity(deps.telegramIntel, deps.telegramEntities, scanInput, {
+      ...(deps.now === undefined ? {} : { now: deps.now }),
+    });
+    return { findings: result.findings, actions: result.actions };
+  }
+
   return { findings: [], actions: [] };
+};
+
+/**
+ * Maps a classified Telegram-shaped input to the field set the scanner
+ * expects. Returns `null` when the input lacks a resolvable target (e.g.
+ * a malformed deep link with no `target`).
+ */
+const telegramScanInputFor = (
+  input: ScanInput,
+): { readonly userOrBotHandle?: string; readonly channelOrSupergroupHandle?: string } | null => {
+  if (input.kind === "telegram_handle") {
+    // Bare `@handle` — Bot API cannot resolve user/bot handles cold, so
+    // we send this through `resolveUserOrBot` which always returns
+    // `cannot_resolve_cold`. The scanner emits
+    // `TELEGRAM_ENTITY_NOT_RESOLVABLE` with the right reason.
+    return { userOrBotHandle: input.handle };
+  }
+
+  if (input.kind === "telegram_url") {
+    if (input.handle === null) {
+      return null;
+    }
+    // Bare `t.me/<handle>` — same constraint as `@handle`: we don't know
+    // statically whether the target is a channel or a user/bot. Try the
+    // channel path first; if Bot API returns 'chat not found' we'll
+    // emit the not-resolvable finding with the correct reason mapping.
+    return { channelOrSupergroupHandle: input.handle };
+  }
+
+  if (input.kind === "telegram_deeplink" && input.target !== null) {
+    // Deep links target bots in nearly every case (`start*` requires a
+    // bot; `addBusinessBot` targets a bot). Channel deep links (`?start=`
+    // is not channel-valid) are rare. We route through the cold user/bot
+    // path so the scanner emits `TELEGRAM_ENTITY_NOT_RESOLVABLE` with the
+    // right reason for the common case.
+    return { userOrBotHandle: input.target };
+  }
+
+  return null;
 };
 
 const summarizeInput = (input: ScanInput, findings: readonly RiskFinding[]): string => {
@@ -161,6 +245,18 @@ const summarizeInput = (input: ScanInput, findings: readonly RiskFinding[]): str
   if (input.kind === "boc") {
     if (findings.length === 0) {
       return "Raw BOC scanned. No risk signals detected.";
+    }
+  }
+
+  if (
+    input.kind === "telegram_handle" ||
+    input.kind === "telegram_url" ||
+    input.kind === "telegram_deeplink" ||
+    input.kind === "telegram_miniapp_url" ||
+    input.kind === "telegram_nft_link"
+  ) {
+    if (findings.length === 0) {
+      return `Telegram ${input.kind === "telegram_handle" ? "handle" : input.kind.replace(/^telegram_/, "")} scanned. No risk signals detected.`;
     }
   }
 

@@ -8,7 +8,13 @@ import type { Logger, LoggerVariables } from "@tonshield/logger";
 import { createHonoRateLimit, defaultTierLimits } from "@tonshield/rate-limit";
 import type { RateLimiter } from "@tonshield/rate-limit";
 import { TtlFetchCache } from "@tonshield/safe-fetch";
-import { canonicalInputHash, type ApiKeyStore, type ReportStore } from "@tonshield/storage";
+import {
+  canonicalInputHash,
+  type ApiKeyStore,
+  type ReportStore,
+  type TelegramEntityStore,
+} from "@tonshield/storage";
+import type { TelegramIntelClient } from "@tonshield/telegram-intel";
 import type { TonEmulatorClient } from "@tonshield/ton-emulator";
 import { classifyInput, createBasicScan, isScanResultCacheable } from "@tonshield/ton-scanner";
 
@@ -35,6 +41,14 @@ export interface CreateApiServerOptions {
    * still surfaces `EMULATION_NOT_CONFIGURED` so the omission is visible.
    */
   readonly emulator: TonEmulatorClient;
+  /**
+   * Telegram Bot API client for M3 intelligence. Same fail-soft posture as
+   * the emulator: passed through unconditionally; `client.enabled === false`
+   * surfaces `TELEGRAM_BOT_API_NOT_CONFIGURED` to the user.
+   */
+  readonly telegramIntel: TelegramIntelClient;
+  /** Telegram entity snapshot store. From `storage.telegramEntities`. */
+  readonly telegramEntities: TelegramEntityStore;
 }
 
 /**
@@ -120,6 +134,7 @@ export const createApiServer = (
     // see `isScanResultCacheable` for the full rationale.
     const cacheable = isScanResultCacheable(classified, {
       emulatorEnabled: options.emulator.enabled,
+      telegramIntelEnabled: options.telegramIntel.enabled,
     });
     const cached = cacheable ? await options.reports.findByInputHash(inputHash) : null;
 
@@ -135,6 +150,8 @@ export const createApiServer = (
     const fresh = await createBasicScan({
       cache: manifestCache,
       emulator: options.emulator,
+      telegramIntel: options.telegramIntel,
+      telegramEntities: options.telegramEntities,
       rawInput: body.data.input,
     });
     // `ReportStore.save()` is dedup-aware: on input-hash conflict it

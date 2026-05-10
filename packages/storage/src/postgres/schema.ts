@@ -1,5 +1,17 @@
 import { sql } from "drizzle-orm";
-import { char, index, integer, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import {
+  bigint,
+  bigserial,
+  boolean,
+  char,
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  uuid,
+} from "drizzle-orm/pg-core";
 
 /**
  * Drizzle schema for the storage layer.
@@ -54,3 +66,78 @@ export const reports = pgTable("reports", {
   actions: jsonb("actions").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
 });
+
+// ── M3 Telegram intelligence ────────────────────────────────────────────────
+//
+// Per docs/research/m3-design.md §4. Snapshots are append-only; the entity
+// row tracks first/last-seen and the stable type.
+//
+// `entityId` is the Bot API signed dialog ID (range table at
+// <https://core.telegram.org/api/bots/ids>). It fits in 52 significant
+// bits, so JS `number` (53-bit safe) would work, but we use Postgres
+// `bigint` for forward-compat and to keep the column semantically distinct
+// from row-count integers elsewhere.
+
+export const telegramEntities = pgTable("telegram_entities", {
+  id: bigint("id", { mode: "bigint" }).primaryKey(),
+  entityKind: text("entity_kind").notNull(),
+  firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).notNull(),
+  lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull(),
+});
+
+export const telegramEntitySnapshots = pgTable(
+  "telegram_entity_snapshots",
+  {
+    id: bigserial("id", { mode: "bigint" }).primaryKey(),
+    entityId: bigint("entity_id", { mode: "bigint" })
+      .notNull()
+      .references(() => telegramEntities.id, { onDelete: "cascade" }),
+    entityKind: text("entity_kind").notNull(),
+    observedAt: timestamp("observed_at", { withTimezone: true }).notNull(),
+    username: text("username"),
+    activeUsernames: text("active_usernames").array(),
+    displayName: text("display_name"),
+    bio: text("bio"),
+    photoFileUniqueId: text("photo_file_unique_id"),
+    isPremium: boolean("is_premium"),
+    memberCount: integer("member_count"),
+    isBot: boolean("is_bot"),
+    source: text("source").notNull(),
+    raw: jsonb("raw"),
+  },
+  (table) => [
+    index("telegram_entity_snapshots_entity_observed_idx").on(table.entityId, table.observedAt),
+    index("telegram_entity_snapshots_username_idx").on(table.username),
+    index("telegram_entity_snapshots_photo_idx").on(table.photoFileUniqueId),
+  ],
+);
+
+export const telegramMigrationEdges = pgTable(
+  "telegram_migration_edges",
+  {
+    fromEntityId: bigint("from_entity_id", { mode: "bigint" }).notNull(),
+    toEntityId: bigint("to_entity_id", { mode: "bigint" }).notNull(),
+    kind: text("kind").notNull(),
+    observedAt: timestamp("observed_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    // Composite primary key — see migration SQL for the actual constraint.
+    index("telegram_migration_edges_from_idx").on(table.fromEntityId),
+    index("telegram_migration_edges_to_idx").on(table.toEntityId),
+  ],
+);
+
+export const telegramUsernameBindings = pgTable(
+  "telegram_username_bindings",
+  {
+    username: text("username").notNull(),
+    entityId: bigint("entity_id", { mode: "bigint" }).notNull(),
+    boundFrom: timestamp("bound_from", { withTimezone: true }).notNull(),
+    boundTo: timestamp("bound_to", { withTimezone: true }),
+    isCollectible: boolean("is_collectible").notNull().default(false),
+  },
+  (table) => [
+    index("telegram_username_bindings_username_idx").on(table.username, table.boundFrom),
+    index("telegram_username_bindings_entity_idx").on(table.entityId),
+  ],
+);

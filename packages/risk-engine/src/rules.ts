@@ -338,6 +338,17 @@ export const coreRules = [
       "If you intended to scan a bot or user by @handle, please forward any message from that bot/user to TON Shield and re-submit, or paste a deep link instead.",
     defaultScoreDelta: 5,
   },
+  {
+    id: "TELEGRAM_USERNAME_RECENTLY_CHANGED",
+    category: "telegram",
+    severity: "medium",
+    title: "Entity changed its username recently",
+    description:
+      "TON Shield's previous snapshot of this entity shows a different @username than the current observation. Recent renames correlate with impersonation pivots — the entity may be reusing a freed handle, or laundering a prior reputation history.",
+    recommendation:
+      "Verify the entity's current identity through an official source before trusting it. Pay particular attention to whether the previous handle matched a well-known project.",
+    defaultScoreDelta: 25,
+  },
 ] as const satisfies readonly RuleDefinition[];
 
 export type CoreRuleId = (typeof coreRules)[number]["id"];

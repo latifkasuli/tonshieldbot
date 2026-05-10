@@ -31,5 +31,7 @@ export { scanTransactionWithEmulation } from "./transaction/emulation-scanner.ts
 export type { EmulationScanResult } from "./transaction/emulation-scanner.ts";
 export { scanBocWithEmulation } from "./boc/scanner.ts";
 export type { BocScanResult } from "./boc/scanner.ts";
+export { scanTelegramEntity } from "./telegram/scanner.ts";
+export type { ScanTelegramEntityInput, TelegramScanResult } from "./telegram/scanner.ts";
 export { isScanResultCacheable } from "./cacheability.ts";
 export type { DecodedPayload, ParsedMessage } from "./transaction/types.ts";
