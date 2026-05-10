@@ -61,8 +61,13 @@ const gatherScanResult = async (input: ScanInput, cache?: FetchCache): Promise<G
     };
   }
 
-  if (input.kind === "tonconnect_link") {
-    const { findings } = await scanTonConnectManifest(input.manifestUrl, cache);
+  // A bare manifest URL is the same scan target as a TON Connect deeplink's
+  // `manifestUrl` — both fetch and validate the same JSON document, so we
+  // route both through `scanTonConnectManifest`. Without this branch, a user
+  // pasting just the manifest URL gets a falsely-clean report.
+  if (input.kind === "tonconnect_link" || input.kind === "manifest_url") {
+    const manifestUrl = input.kind === "tonconnect_link" ? input.manifestUrl : input.url;
+    const { findings } = await scanTonConnectManifest(manifestUrl, cache);
 
     return { findings, actions: [] };
   }
