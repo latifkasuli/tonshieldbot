@@ -278,6 +278,66 @@ export const coreRules = [
       "Deploy the wallet first, or scan with a sender that already has on-chain state.",
     defaultScoreDelta: 5,
   },
+
+  // ── M3 Tier-0 Telegram Bot API degradation rules ──────────────────────────
+  // Mirror of the M2 PR-D1 classification table for the Telegram intelligence
+  // layer. Fired by `@tonshield/telegram-intel`-driven scanners when Bot API
+  // returns an error, the token is absent, or an entity can't be resolved.
+  // See docs/research/m3-design.md §5 Tier-0.
+
+  {
+    id: "TELEGRAM_BOT_API_NOT_CONFIGURED",
+    category: "telegram",
+    severity: "info",
+    title: "Telegram Bot API disabled in this deployment",
+    description:
+      "TELEGRAM_BOT_TOKEN is not configured in this environment. Telegram-side scans run in static-only mode (handle pattern checks against the watchlist) without Bot API enrichment.",
+    recommendation:
+      "If you operate this instance, set TELEGRAM_BOT_TOKEN to enable Bot API reads (getChat, getUserGifts, getChatGifts, getAvailableGifts).",
+    defaultScoreDelta: 5,
+  },
+  {
+    id: "TELEGRAM_BOT_API_RATE_LIMITED",
+    category: "telegram",
+    severity: "info",
+    title: "Telegram Bot API rate-limited",
+    description:
+      "Telegram returned 429 for this scan's Bot API request. The static-only signal is still authoritative; live enrichment was skipped for this report.",
+    recommendation:
+      "Retry in a few seconds. If this persists, lower scan volume or distribute load across additional Bot API tokens.",
+    defaultScoreDelta: 5,
+  },
+  {
+    id: "TELEGRAM_BOT_API_PROVIDER_DOWN",
+    category: "telegram",
+    severity: "low",
+    title: "Telegram Bot API unreachable",
+    description:
+      "Telegram returned 5xx or the request timed out / failed at the network layer. Bot API enrichment could not be performed; the static-only signal is the only data in this report.",
+    recommendation: "Treat the static-only report with extra caution and retry shortly.",
+    defaultScoreDelta: 10,
+  },
+  {
+    id: "TELEGRAM_BOT_API_FAILED",
+    category: "telegram",
+    severity: "low",
+    title: "Telegram Bot API rejected the request",
+    description:
+      "Telegram returned 4xx (other than 429) for this scan's Bot API request. The static-only signal is still authoritative for this report.",
+    recommendation: "Treat the static-only report with extra caution.",
+    defaultScoreDelta: 10,
+  },
+  {
+    id: "TELEGRAM_ENTITY_NOT_RESOLVABLE",
+    category: "telegram",
+    severity: "info",
+    title: "Telegram entity could not be resolved",
+    description:
+      "Bot API returned 'chat not found' for this handle. Either the handle is unclaimed or no longer exists, OR it is a user/bot handle that requires prior context (a forwarded message from the entity, or prior observation) before Bot API can resolve it. Evidence carries a `reason` discriminator distinguishing the two cases.",
+    recommendation:
+      "If you intended to scan a bot or user by @handle, please forward any message from that bot/user to TON Shield and re-submit, or paste a deep link instead.",
+    defaultScoreDelta: 5,
+  },
 ] as const satisfies readonly RuleDefinition[];
 
 export type CoreRuleId = (typeof coreRules)[number]["id"];

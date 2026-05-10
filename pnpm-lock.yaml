@@ -65,6 +65,9 @@ importers:
       '@tonshield/storage':
         specifier: workspace:*
         version: link:../../packages/storage
+      '@tonshield/telegram-intel':
+        specifier: workspace:*
+        version: link:../../packages/telegram-intel
       '@tonshield/ton-emulator':
         specifier: workspace:*
         version: link:../../packages/ton-emulator
@@ -101,6 +104,9 @@ importers:
       '@tonshield/storage':
         specifier: workspace:*
         version: link:../../packages/storage
+      '@tonshield/telegram-intel':
+        specifier: workspace:*
+        version: link:../../packages/telegram-intel
       '@tonshield/ton-emulator':
         specifier: workspace:*
         version: link:../../packages/ton-emulator
@@ -228,6 +234,18 @@ importers:
       tsx:
         specifier: ^4.21.0
         version: 4.21.0
+
+  packages/telegram-intel:
+    dependencies:
+      '@tonshield/shared':
+        specifier: workspace:*
+        version: link:../shared
+      grammy:
+        specifier: ^1.42.0
+        version: 1.42.0
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
 
   packages/ton-emulator:
     dependencies:

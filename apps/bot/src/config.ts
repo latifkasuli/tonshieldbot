@@ -8,6 +8,11 @@ const botConfigSchema = z.object({
   // services use the same TONAPI key when emulation is enabled.
   TONAPI_KEY: z.string().optional(),
   TONAPI_BASE_URL: z.string().optional(),
+  // M3 Telegram intelligence base URL override (typically only set when
+  // self-hosting a local Bot API server). The token itself reuses
+  // BOT_TOKEN — the long-polling UI bot and the intel client share one
+  // Bot API identity per the §9 Q1 decision in m3-design.md.
+  TELEGRAM_API_BASE_URL: z.string().optional(),
 });
 
 export interface BotConfig {
@@ -16,6 +21,7 @@ export interface BotConfig {
   readonly redisUrl: string | undefined;
   readonly tonApiKey: string | undefined;
   readonly tonApiBaseUrl: string | undefined;
+  readonly telegramApiBaseUrl: string | undefined;
 }
 
 export const loadBotConfig = (env: NodeJS.ProcessEnv = process.env): BotConfig => {
@@ -27,5 +33,6 @@ export const loadBotConfig = (env: NodeJS.ProcessEnv = process.env): BotConfig =
     redisUrl: parsed.REDIS_URL,
     tonApiKey: parsed.TONAPI_KEY,
     tonApiBaseUrl: parsed.TONAPI_BASE_URL,
+    telegramApiBaseUrl: parsed.TELEGRAM_API_BASE_URL,
   };
 };
