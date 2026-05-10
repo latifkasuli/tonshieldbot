@@ -13,6 +13,13 @@ const envSchema = z.object({
   // When set, rate limiting uses Redis so all api instances share the
   // same buckets. Unset → in-memory rate limiter (single-process only).
   REDIS_URL: z.string().optional(),
+  // When set, transaction-JSON scans get a live TONAPI emulation pass
+  // (M2 / spec §9.3). Unset → static-decode-only reports plus an
+  // `EMULATION_NOT_CONFIGURED` finding so the omission is visible.
+  TONAPI_KEY: z.string().optional(),
+  // Override the TONAPI base URL — typically only set on testnet
+  // deployments (`https://testnet.tonapi.io`). Defaults to mainnet.
+  TONAPI_BASE_URL: z.string().optional(),
 });
 
 export interface ApiConfig {
@@ -20,6 +27,8 @@ export interface ApiConfig {
   readonly port: number;
   readonly databaseUrl: string | undefined;
   readonly redisUrl: string | undefined;
+  readonly tonApiKey: string | undefined;
+  readonly tonApiBaseUrl: string | undefined;
 }
 
 const DEFAULT_PORT = 3000;
@@ -32,5 +41,7 @@ export const loadApiConfig = (env: NodeJS.ProcessEnv = process.env): ApiConfig =
     port: parsed.API_PORT ?? parsed.PORT ?? DEFAULT_PORT,
     databaseUrl: parsed.DATABASE_URL,
     redisUrl: parsed.REDIS_URL,
+    tonApiKey: parsed.TONAPI_KEY,
+    tonApiBaseUrl: parsed.TONAPI_BASE_URL,
   };
 };

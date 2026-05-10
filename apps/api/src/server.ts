@@ -9,7 +9,8 @@ import { createHonoRateLimit, defaultTierLimits } from "@tonshield/rate-limit";
 import type { RateLimiter } from "@tonshield/rate-limit";
 import { TtlFetchCache } from "@tonshield/safe-fetch";
 import { canonicalInputHash, type ApiKeyStore, type ReportStore } from "@tonshield/storage";
-import { classifyInput, createBasicScan } from "@tonshield/ton-scanner";
+import type { TonEmulatorClient } from "@tonshield/ton-emulator";
+import { classifyInput, createBasicScan, isScanResultCacheable } from "@tonshield/ton-scanner";
 
 const scanRequestSchema = z.object({
   input: z.string().min(1),
@@ -28,6 +29,12 @@ export interface CreateApiServerOptions {
   readonly apiKeys: ApiKeyStore;
   readonly reports: ReportStore;
   readonly rateLimiter: RateLimiter;
+  /**
+   * TONAPI client for M2 emulation. The scanner branches on `client.enabled`
+   * internally, so we always pass it through; an unconfigured deployment
+   * still surfaces `EMULATION_NOT_CONFIGURED` so the omission is visible.
+   */
+  readonly emulator: TonEmulatorClient;
 }
 
 /**
@@ -108,7 +115,13 @@ export const createApiServer = (
 
     const classified = classifyInput(body.data.input);
     const inputHash = canonicalInputHash(classified);
-    const cached = await options.reports.findByInputHash(inputHash);
+    // Emulation runs against current blockchain state, so transaction-JSON
+    // scans can't be safely served from cache when emulation is enabled —
+    // see `isScanResultCacheable` for the full rationale.
+    const cacheable = isScanResultCacheable(classified, {
+      emulatorEnabled: options.emulator.enabled,
+    });
+    const cached = cacheable ? await options.reports.findByInputHash(inputHash) : null;
 
     if (cached !== null) {
       c.var.log.info(
@@ -121,16 +134,24 @@ export const createApiServer = (
 
     const fresh = await createBasicScan({
       cache: manifestCache,
+      emulator: options.emulator,
       rawInput: body.data.input,
     });
-    const saved = await options.reports.save(fresh);
+    // `ReportStore.save()` is dedup-aware: on input-hash conflict it
+    // returns the existing row instead of writing the fresh one. For
+    // emulation results that's wrong — the previously-stored report can be
+    // stale (different seqno/balance/code) or carry a stuck
+    // `EMULATION_NOT_CONFIGURED` from before the key was set. When
+    // `cacheable === false`, we return the fresh report directly.
+    const saved = cacheable ? await options.reports.save(fresh) : fresh;
 
     c.var.log.info(
       {
         input_kind: saved.input.kind,
         verdict: saved.verdict,
         risk_score: saved.riskScore,
-        dedup_hit: saved.id !== fresh.id,
+        dedup_hit: cacheable && saved.id !== fresh.id,
+        persisted: cacheable,
       },
       "scan_resolved",
     );

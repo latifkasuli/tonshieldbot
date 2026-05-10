@@ -235,6 +235,17 @@ export const coreRules = [
     defaultScoreDelta: 5,
   },
   {
+    id: "EMULATION_SKIPPED_NO_MESSAGES",
+    category: "emulation",
+    severity: "info",
+    title: "Emulation skipped — no `messages` array in transaction",
+    description:
+      "The transaction JSON has no `messages` array. The M1.5 static decoder accepts a permissive single-message format (top-level `to`/`value` or `address`/`amount`), but emulation requires the canonical TON Connect `messages[]` shape to build a wallet transfer. Static decode still ran.",
+    recommendation:
+      "For a live execution preview, paste a transaction in TON Connect format with a `messages` array.",
+    defaultScoreDelta: 5,
+  },
+  {
     id: "EMULATION_NOT_CONFIGURED",
     category: "emulation",
     severity: "info",

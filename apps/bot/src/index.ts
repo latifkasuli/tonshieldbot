@@ -5,7 +5,7 @@ import type { LoggerFlavor } from "@tonshield/logger";
 import { createGrammyRateLimit, defaultTierLimits } from "@tonshield/rate-limit";
 import { TtlFetchCache } from "@tonshield/safe-fetch";
 import { canonicalInputHash } from "@tonshield/storage";
-import { classifyInput, createBasicScan } from "@tonshield/ton-scanner";
+import { classifyInput, createBasicScan, isScanResultCacheable } from "@tonshield/ton-scanner";
 import { loadBotConfig } from "./config.ts";
 import { createBotDependencies } from "./deps.ts";
 import { formatScanReport, welcomeMessage } from "./messages.ts";
@@ -43,7 +43,13 @@ bot.on("message:text", async (ctx) => {
   const rawInput = ctx.message.text;
   const classified = classifyInput(rawInput);
   const inputHash = canonicalInputHash(classified);
-  const cached = await deps.storage.reports.findByInputHash(inputHash);
+  // Emulation runs against current blockchain state, so transaction-JSON
+  // scans can't be safely served from cache when emulation is enabled —
+  // see `isScanResultCacheable` for the full rationale.
+  const cacheable = isScanResultCacheable(classified, {
+    emulatorEnabled: deps.emulator.enabled,
+  });
+  const cached = cacheable ? await deps.storage.reports.findByInputHash(inputHash) : null;
 
   let report;
 
@@ -54,14 +60,23 @@ bot.on("message:text", async (ctx) => {
     );
     report = cached;
   } else {
-    const fresh = await createBasicScan({ cache: manifestCache, rawInput });
-    report = await deps.storage.reports.save(fresh);
+    const fresh = await createBasicScan({
+      cache: manifestCache,
+      emulator: deps.emulator,
+      rawInput,
+    });
+    // `ReportStore.save()` is dedup-aware and returns the existing row on
+    // input-hash conflict — symmetric with `findByInputHash` above. When
+    // not cacheable, return the fresh report directly. See
+    // `isScanResultCacheable` for the rationale.
+    report = cacheable ? await deps.storage.reports.save(fresh) : fresh;
     ctx.log.info(
       {
         input_kind: report.input.kind,
         verdict: report.verdict,
         risk_score: report.riskScore,
-        dedup_hit: report.id !== fresh.id,
+        dedup_hit: cacheable && report.id !== fresh.id,
+        persisted: cacheable,
       },
       "scan_resolved",
     );

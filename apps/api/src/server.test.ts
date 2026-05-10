@@ -7,6 +7,7 @@ import {
   createInMemoryTenantStore,
 } from "@tonshield/storage";
 import type { ApiKeyScope, ApiKeyStore, ReportStore } from "@tonshield/storage";
+import { createTonEmulatorClient } from "@tonshield/ton-emulator";
 import { createApiServer } from "./server.ts";
 
 interface TestSetup {
@@ -39,11 +40,17 @@ const buildApp = async (
   // Silent logger keeps tests quiet without spawning pino-pretty.
   const logger = createLogger({ service: "tonshield-api-test", level: "silent", pretty: false });
 
+  // Tests run with emulation disabled (no `TONAPI_KEY`). Scans of
+  // `transaction_json` inputs will surface `EMULATION_NOT_CONFIGURED`,
+  // which existing assertions already tolerate.
+  const emulator = createTonEmulatorClient({ apiKey: null, baseUrl: "https://tonapi.io" });
+
   const app = createApiServer({
     logger,
     apiKeys,
     reports,
     rateLimiter: createInMemoryRateLimiter(),
+    emulator,
   });
 
   return { app, apiKeys, reports, rawKey: options.rawKey ?? "tsk_test_key" };

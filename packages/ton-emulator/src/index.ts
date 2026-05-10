@@ -8,8 +8,13 @@ export type {
   NetworkGlobalId,
   TonConnectMessage,
 } from "./request-builder.ts";
+export { emulateMessageToWallet } from "./emulate.ts";
 export { fetchSenderMetadata } from "./sender-metadata.ts";
-export type { SenderMetadata, SenderMetadataResult } from "./sender-metadata.ts";
+export type {
+  SenderMetadata,
+  SenderMetadataResult,
+  SupportedWalletVersion,
+} from "./sender-metadata.ts";
 export { emulatedActionKinds, walletVersions } from "./types.ts";
 export type {
   EmulatedAction,

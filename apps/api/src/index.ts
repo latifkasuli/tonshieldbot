@@ -10,6 +10,7 @@ const app = createApiServer({
   apiKeys: deps.storage.apiKeys,
   reports: deps.storage.reports,
   rateLimiter: deps.rateLimiter,
+  emulator: deps.emulator,
 });
 
 serve(

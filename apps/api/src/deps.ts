@@ -5,6 +5,8 @@ import { createInMemoryRateLimiter, createRedisRateLimiter } from "@tonshield/ra
 import type { RateLimiter } from "@tonshield/rate-limit";
 import { createStorage } from "@tonshield/storage";
 import type { Storage } from "@tonshield/storage";
+import { createTonEmulatorClient } from "@tonshield/ton-emulator";
+import type { TonEmulatorClient } from "@tonshield/ton-emulator";
 import type { ApiConfig } from "./env.ts";
 
 export interface ApiDependencies {
@@ -12,6 +14,12 @@ export interface ApiDependencies {
   readonly storage: Storage;
   readonly rateLimiter: RateLimiter;
   readonly redis: Redis | null;
+  /**
+   * TONAPI client for M2 emulation. Always present — when no `TONAPI_KEY`
+   * was set, `client.enabled` is false and the scanner emits
+   * `EMULATION_NOT_CONFIGURED` instead of trying any HTTP calls.
+   */
+  readonly emulator: TonEmulatorClient;
   readonly close: () => Promise<void>;
 }
 
@@ -46,11 +54,19 @@ export const createApiDependencies = (config: ApiConfig): ApiDependencies => {
     "storage_initialized",
   );
 
+  const emulator = createTonEmulatorClient({
+    apiKey: config.tonApiKey ?? null,
+    baseUrl: config.tonApiBaseUrl ?? "https://tonapi.io",
+  });
+
+  logger.info({ enabled: emulator.enabled, baseUrl: emulator.baseUrl }, "emulator_initialized");
+
   return {
     logger,
     storage,
     rateLimiter,
     redis,
+    emulator,
     close: async () => {
       await storage.close();
       if (redis !== null) {
