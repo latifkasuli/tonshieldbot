@@ -3,9 +3,9 @@ import {
   emulateMessageToWallet,
   fetchSenderMetadata,
   buildExternalMessageBoc,
-  type EmulationResult,
   type SenderMetadataResult,
   type TonEmulatorClient,
+  type WalletEmulateOk,
 } from "@tonshield/ton-emulator";
 import type { TransactionJsonInput } from "@tonshield/shared";
 import { scanTransactionWithEmulation } from "../src/transaction/emulation-scanner.ts";
@@ -69,10 +69,9 @@ const okMetadata = (): Extract<SenderMetadataResult, { status: "ok" }> => ({
   },
 });
 
-const okEmulationResult = (
-  overrides: Partial<Extract<EmulationResult, { status: "ok" }>> = {},
-): Extract<EmulationResult, { status: "ok" }> => ({
+const okEmulationResult = (overrides: Partial<WalletEmulateOk> = {}): WalletEmulateOk => ({
   status: "ok",
+  source: "wallet_emulate",
   actions: [
     {
       kind: "ton_transfer",

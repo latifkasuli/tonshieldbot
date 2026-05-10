@@ -16,6 +16,13 @@ const tonAddressInput = (): ScanInput => ({
   address: "EQA",
 });
 
+const bocInput = (): ScanInput => ({
+  kind: "boc",
+  raw: "te6ccgEBAQ",
+  normalized: "te6ccgEBAQ",
+  boc: "te6ccgEBAQ",
+});
+
 const unknownInput = (): ScanInput => ({
   kind: "unknown",
   raw: "garbage",
@@ -39,6 +46,18 @@ describe("isScanResultCacheable", () => {
   it("returns true for ton_address regardless of emulator state", () => {
     expect(isScanResultCacheable(tonAddressInput(), { emulatorEnabled: false })).toBe(true);
     expect(isScanResultCacheable(tonAddressInput(), { emulatorEnabled: true })).toBe(true);
+  });
+
+  it("returns true for boc when emulator is disabled (no live state to invalidate)", () => {
+    expect(isScanResultCacheable(bocInput(), { emulatorEnabled: false })).toBe(true);
+  });
+
+  it("returns false for boc when emulator is enabled (state-dependent)", () => {
+    // Raw BOC inputs go through `/v2/events/emulate` against current
+    // blockchain state. Same reasoning as transaction_json: caching the
+    // first emulation result would serve stale data, and pre-key cached
+    // `EMULATION_NOT_CONFIGURED` findings would persist after key rollout.
+    expect(isScanResultCacheable(bocInput(), { emulatorEnabled: true })).toBe(false);
   });
 
   it("returns true for unknown inputs regardless of emulator state", () => {

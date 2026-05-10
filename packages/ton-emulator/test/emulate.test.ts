@@ -1,8 +1,8 @@
 import { Address } from "@ton/core";
-import type { MessageConsequences } from "@ton-api/client";
+import type { Event, MessageConsequences } from "@ton-api/client";
 import { describe, expect, it, vi } from "vitest";
 import type { TonEmulatorClient } from "../src/client.ts";
-import { emulateMessageToWallet } from "../src/emulate.ts";
+import { emulateMessageToEvent, emulateMessageToWallet } from "../src/emulate.ts";
 
 // Minimal valid BOC string accepted by Cell.fromBase64 — enough to satisfy
 // the boundary conversion. The SDK call itself is mocked, so the BOC is
@@ -300,5 +300,125 @@ describe("emulateMessageToWallet structured details extraction", () => {
     if (result.status === "ok") {
       expect(result.actions[0]?.details).toBeNull();
     }
+  });
+});
+
+// ── /v2/events/emulate wrapper (PR-D3) ──────────────────────────────────────
+//
+// Pins the contract for the events-emulate fallback: the OK variant must
+// have `source: "events_emulate"`, `risk: null`, and `trace.aborted: null`.
+// Failure classification is shared with the wallet wrapper (covered by the
+// suites above); these tests focus on the bits unique to this endpoint.
+
+const buildEventClient = (response: Event | (() => never)): TonEmulatorClient => ({
+  enabled: true,
+  baseUrl: "https://tonapi.io",
+  raw: {
+    emulation: {
+      emulateMessageToEvent:
+        typeof response === "function" ? response : vi.fn().mockResolvedValue(response),
+    },
+  } as unknown as TonEmulatorClient["raw"],
+});
+
+const buildEventResponse = (
+  overrides: { isScam?: boolean; actions?: readonly unknown[] } = {},
+): Event => {
+  // Mirror the shape returned by /v2/events/emulate per the SDK type and
+  // the live shape probe — no `trace`, no `risk`, top-level `is_scam`.
+  return {
+    eventId: "evt",
+    timestamp: 0,
+    actions: (overrides.actions ?? []) as never,
+    valueFlow: [],
+    isScam: overrides.isScam ?? false,
+    lt: 1n,
+    inProgress: false,
+  };
+};
+
+describe("emulateMessageToEvent response mapping", () => {
+  it("returns skipped when client is disabled", async () => {
+    const client: TonEmulatorClient = {
+      enabled: false,
+      baseUrl: "https://tonapi.io",
+      raw: {} as TonEmulatorClient["raw"],
+    };
+
+    const result = await emulateMessageToEvent(client, DUMMY_BOC);
+
+    expect(result).toEqual({ status: "skipped", reason: "not_configured" });
+  });
+
+  it("returns source='events_emulate' with risk=null and trace.aborted=null on OK", async () => {
+    // Pins the central type-shape contract: callers reading `result.risk`
+    // or `result.trace.aborted` on this path must encounter explicit null,
+    // not a stub object that could be mistaken for real data.
+    const client = buildEventClient(buildEventResponse());
+
+    const result = await emulateMessageToEvent(client, DUMMY_BOC);
+
+    expect(result.status).toBe("ok");
+    if (result.status === "ok") {
+      expect(result.source).toBe("events_emulate");
+      expect(result.risk).toBeNull();
+      expect(result.trace.aborted).toBeNull();
+      expect(result.trace.isScam).toBe(false);
+    }
+  });
+
+  it("propagates is_scam from the event top-level field", async () => {
+    const client = buildEventClient(buildEventResponse({ isScam: true }));
+
+    const result = await emulateMessageToEvent(client, DUMMY_BOC);
+
+    expect(result.status).toBe("ok");
+    if (result.status === "ok") {
+      expect(result.trace.isScam).toBe(true);
+    }
+  });
+
+  it("maps top-level actions[] through the same Action→EmulatedAction mapper as wallet/emulate", async () => {
+    // The action shape is identical across the two endpoints (verified by
+    // the live shape probe in .smoke/endpoint-shapes.mts), so the same
+    // mapper should populate `details` consistently. This test pins that
+    // contract — if the events endpoint ever starts returning a different
+    // action subobject shape, this fails loud.
+    const recipientRaw = "0:cdce58745d265d6f9fd0ae5c79423c991d500eef8bf9a0c79556bb45ff956dd6";
+    const action = {
+      type: "TonTransfer",
+      status: "ok",
+      simplePreview: { description: "Send 0.01 TON" },
+      baseTransactions: [],
+      TonTransfer: {
+        sender: { address: Address.parseRaw(recipientRaw), isScam: false, isWallet: true },
+        recipient: { address: Address.parseRaw(recipientRaw), isScam: false, isWallet: true },
+        amount: 10_000_000n,
+      },
+    };
+    const client = buildEventClient(buildEventResponse({ actions: [action] }));
+
+    const result = await emulateMessageToEvent(client, DUMMY_BOC);
+
+    expect(result.status).toBe("ok");
+    if (result.status === "ok") {
+      expect(result.actions[0]?.details).toEqual({
+        kind: "ton_transfer",
+        recipient: recipientRaw,
+        amountNano: 10_000_000n,
+      });
+    }
+  });
+
+  it("classifies a 429 SDK error from events-emulate as rate_limited (shared with wallet path)", async () => {
+    const client = buildEventClient(() => {
+      const error = new Error("Too Many Requests") as Error & { status: number };
+      error.status = 429;
+      throw error;
+    });
+
+    const result = await emulateMessageToEvent(client, DUMMY_BOC);
+
+    expect(result).toEqual({ status: "failed", reason: "rate_limited", httpStatus: 429 });
   });
 });

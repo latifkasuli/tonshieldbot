@@ -131,31 +131,100 @@ export interface EmulatedAction {
 }
 
 /**
- * The result we hand to the scanner. Distilled from `MessageConsequences`
- * and from explicit failure/skip paths described in spec §9.3.5.
+ * The result we hand to the scanner. Distilled from one of the two TONAPI
+ * emulation endpoints we call:
+ *
+ *   - `/v2/wallet/emulate` returns `MessageConsequences { trace, risk, event }`.
+ *     We expose this as the `wallet_emulate` `ok` variant — full fidelity
+ *     including `risk.transferAllRemainingBalance` and `trace.aborted`.
+ *   - `/v2/events/emulate` returns `Event { actions, valueFlow, isScam, … }`.
+ *     We expose this as the `events_emulate` `ok` variant. There is NO
+ *     `risk` object and NO trace shape on this endpoint — those fields are
+ *     pinned to `null` in the type so consumers can't accidentally read them.
+ *
+ * The two `ok` variants share the same `actions[]` shape, so downstream code
+ * that only consumes actions (the diff module, action-preview rendering)
+ * works against either without branching. Consumers that read `risk` or
+ * `trace.aborted` MUST narrow on `source` first; TypeScript enforces this.
+ *
+ * Failure and skip variants are endpoint-agnostic and unchanged from PR-D1.
  */
-export type EmulationResult =
-  | {
-      readonly status: "ok";
-      readonly actions: readonly EmulatedAction[];
-      readonly risk: EmulatedRisk;
-      readonly trace: {
-        /** True when the root transaction aborted. */
-        readonly aborted: boolean;
-        /** TONAPI's `is_scam` flag on the resulting account event. */
-        readonly isScam: boolean;
-      };
-    }
-  | {
-      readonly status: "skipped";
-      readonly reason:
-        | "not_configured"
-        | "no_sender"
-        | "sender_uninitialised"
-        | "unknown_wallet_contract";
-    }
-  | {
-      readonly status: "failed";
-      readonly reason: "rate_limited" | "provider_down" | "bad_request" | "unknown";
-      readonly httpStatus: number | null;
-    };
+export type EmulationResult = WalletEmulateOk | EventsEmulateOk | SkippedResult | FailedResult;
+
+/**
+ * Endpoint-agnostic "did not emulate" result. Used by both wallet and events
+ * paths; the `reason` enum covers all skip causes either path can produce.
+ */
+export interface SkippedResult {
+  readonly status: "skipped";
+  readonly reason:
+    | "not_configured"
+    | "no_sender"
+    | "sender_uninitialised"
+    | "unknown_wallet_contract";
+}
+
+/**
+ * Endpoint-agnostic provider-failure result. Shared classification with PR-D1.
+ */
+export interface FailedResult {
+  readonly status: "failed";
+  readonly reason: "rate_limited" | "provider_down" | "bad_request" | "unknown";
+  readonly httpStatus: number | null;
+}
+
+/**
+ * Tighter return type for `emulateMessageToWallet`. Excludes the events-emulate
+ * variant so callers can hand the OK case directly to wallet-only consumers
+ * without re-narrowing on `source`.
+ */
+export type WalletEmulationResult = WalletEmulateOk | SkippedResult | FailedResult;
+
+/**
+ * Tighter return type for `emulateMessageToEvent`. Mirror of the above for
+ * the events-emulate path.
+ */
+export type EventsEmulationResult = EventsEmulateOk | SkippedResult | FailedResult;
+
+/**
+ * Successful `/v2/wallet/emulate` response. Carries the full
+ * `MessageConsequences` shape — pre-computed `risk` and a trace with the
+ * canonical `aborted` flag.
+ */
+export interface WalletEmulateOk {
+  readonly status: "ok";
+  readonly source: "wallet_emulate";
+  readonly actions: readonly EmulatedAction[];
+  readonly risk: EmulatedRisk;
+  readonly trace: {
+    /** True when the root transaction aborted. */
+    readonly aborted: boolean;
+    /** TONAPI's `is_scam` flag on the resulting account event. */
+    readonly isScam: boolean;
+  };
+}
+
+/**
+ * Successful `/v2/events/emulate` response. Used for raw-BOC inputs where
+ * we don't have a wallet-typed envelope to give to wallet/emulate. TONAPI
+ * does not return a `risk` object or a trace on this endpoint, so:
+ *
+ *   - `risk` is `null` (callers must NOT emit `EMULATION_SENDS_NEAR_FULL_BALANCE`
+ *     — we don't compute the pre-computed risk summary ourselves)
+ *   - `trace.aborted` is `null` (callers must NOT emit `EMULATION_ABORTED` —
+ *     we'd be inventing a definition; the events response has no honest
+ *     source for it)
+ *   - `trace.isScam` IS available — the events response includes the
+ *     `is_scam` flag at top level, so `EMULATION_SCAM_PATTERN_DETECTED` is
+ *     fair game on this path.
+ */
+export interface EventsEmulateOk {
+  readonly status: "ok";
+  readonly source: "events_emulate";
+  readonly actions: readonly EmulatedAction[];
+  readonly risk: null;
+  readonly trace: {
+    readonly aborted: null;
+    readonly isScam: boolean;
+  };
+}

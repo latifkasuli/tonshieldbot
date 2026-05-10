@@ -7,10 +7,10 @@ import {
   fetchSenderMetadata,
   type EmulatedAction,
   type EmulatedActionKind,
-  type EmulationResult,
   type SenderMetadata,
   type TonEmulatorClient,
   type TonConnectMessage,
+  type WalletEmulateOk,
 } from "@tonshield/ton-emulator";
 import { diffStaticVsEmulated, type DiffMismatch } from "./diff.ts";
 import type { ParsedMessage } from "./types.ts";
@@ -189,7 +189,11 @@ export const scanTransactionWithEmulation = async (
 // ── result mapping ──────────────────────────────────────────────────────────
 
 const mapOkResult = (
-  result: Extract<EmulationResult, { status: "ok" }>,
+  // Narrowed to the wallet/emulate variant: this scanner only ever calls
+  // `emulateMessageToWallet`, so `risk` (non-null) and `trace.aborted`
+  // (concrete boolean) are guaranteed present. Raw-BOC inputs go through a
+  // different scanner that consumes the `EventsEmulateOk` variant.
+  result: WalletEmulateOk,
   senderAddress: Address,
   staticContext: {
     readonly staticMessages: readonly ParsedMessage[];

@@ -13,21 +13,23 @@
  * just needs the typed boundary so the scanner can degrade gracefully.
  */
 import { Cell } from "@ton/core";
-import type { Action, MessageConsequences, Risk } from "@ton-api/client";
+import type { Action, Event, MessageConsequences, Risk } from "@ton-api/client";
 import type { TonEmulatorClient } from "./client.ts";
 import {
   type EmulatedAction,
   type EmulatedActionDetails,
   type EmulatedActionKind,
   type EmulatedRisk,
-  type EmulationResult,
+  type EventsEmulationResult,
+  type FailedResult,
+  type WalletEmulationResult,
   emulatedActionKinds,
 } from "./types.ts";
 
 export const emulateMessageToWallet = async (
   client: TonEmulatorClient,
   boc: string,
-): Promise<EmulationResult> => {
+): Promise<WalletEmulationResult> => {
   if (!client.enabled) {
     return { status: "skipped", reason: "not_configured" };
   }
@@ -47,6 +49,7 @@ export const emulateMessageToWallet = async (
 
   return {
     status: "ok",
+    source: "wallet_emulate",
     actions: response.event.actions.map(toEmulatedAction),
     risk: toEmulatedRisk(response.risk),
     trace: {
@@ -57,6 +60,63 @@ export const emulateMessageToWallet = async (
       // what the EMULATION_ABORTED rule is documented against in spec §9.3.3.
       aborted: response.trace.transaction.aborted,
       isScam: response.event.isScam,
+    },
+  };
+};
+
+/**
+ * High-level wrapper around `POST /v2/events/emulate`. Used as a fallback
+ * when the caller has a raw BOC but no way to wrap it as an authenticated
+ * wallet message — see `scanBocWithEmulation` in `@tonshield/ton-scanner`.
+ *
+ * Key contract differences from `emulateMessageToWallet`:
+ *
+ *   - Returns `source: "events_emulate"`, narrowing `risk` to `null` and
+ *     `trace.aborted` to `null` in the result type. Callers MUST NOT emit
+ *     `EMULATION_SENDS_NEAR_FULL_BALANCE` or `EMULATION_ABORTED` on this
+ *     path — TypeScript enforces that those fields cannot be read without
+ *     branching on `source`.
+ *   - Empirically (verified via the `.smoke/endpoint-shapes.mts` probe),
+ *     `/v2/events/emulate` is permissive about the BOC's signature for
+ *     wallet senders — no `ignore_signature_check=true` parameter is needed
+ *     even for dummy-signed messages. The SDK call below relies on that.
+ *
+ * Failure and skip classification is shared with `emulateMessageToWallet`
+ * via `classifyFailure`. Errors from this endpoint should be presented to
+ * users with identical degradation findings (EMULATION_RATE_LIMITED,
+ * EMULATION_PROVIDER_DOWN, EMULATION_FAILED) per PR-D1.
+ */
+export const emulateMessageToEvent = async (
+  client: TonEmulatorClient,
+  boc: string,
+): Promise<EventsEmulationResult> => {
+  if (!client.enabled) {
+    return { status: "skipped", reason: "not_configured" };
+  }
+
+  const bocCell = Cell.fromBase64(boc);
+  let response: Event;
+
+  try {
+    response = await client.raw.emulation.emulateMessageToEvent({ boc: bocCell });
+  } catch (error) {
+    return classifyFailure(error);
+  }
+
+  return {
+    status: "ok",
+    source: "events_emulate",
+    actions: response.actions.map(toEmulatedAction),
+    // /v2/events/emulate does not return a pre-computed risk summary.
+    // We deliberately do NOT derive one from valueFlow — that would be a
+    // different (and lower-fidelity) signal than wallet/emulate's risk and
+    // would invite consumers to treat the two as interchangeable.
+    risk: null,
+    trace: {
+      // No trace shape from this endpoint. Pinning `aborted` to null in the
+      // type ensures consumers can't conflate it with a confirmed `false`.
+      aborted: null,
+      isScam: response.isScam,
     },
   };
 };
@@ -174,7 +234,7 @@ const toEmulatedRisk = (risk: Risk): EmulatedRisk => ({
       : null,
 });
 
-const classifyFailure = (error: unknown): Extract<EmulationResult, { status: "failed" }> => {
+const classifyFailure = (error: unknown): FailedResult => {
   const httpStatus = extractHttpStatus(error);
 
   if (httpStatus === null) {
