@@ -216,11 +216,10 @@ describe("scanTransactionWithEmulation degradation paths", () => {
   // structural defect rejects the whole request as TRANSACTION_MALFORMED_MESSAGE.
 
   it.each([
-    ["messages field absent", { from: SENDER_FRIENDLY }, /missing or not an array/],
     [
       "messages is not an array",
       { from: SENDER_FRIENDLY, messages: "not-an-array" },
-      /missing or not an array/,
+      /not an array/,
     ],
     [
       "messages array is empty",
@@ -279,6 +278,33 @@ describe("scanTransactionWithEmulation degradation paths", () => {
     expect(String(result.findings[0]?.evidence.reason)).toMatch(expectedReason);
     // Critically: emulation MUST NOT run on a partial / silently-truncated
     // message list. Verify the request builder is never called.
+    expect(mockedBuildBoc).not.toHaveBeenCalled();
+    expect(mockedEmulate).not.toHaveBeenCalled();
+  });
+
+  it("emits EMULATION_SKIPPED_NO_MESSAGES (not MALFORMED) when messages field is absent", async () => {
+    // M1.5 backwards-compat regression test: the static decoder accepts
+    // single-message format (no `messages[]`, just top-level fields), so
+    // emitting MALFORMED here would falsely contradict the static decode.
+    // Skip emulation gracefully instead.
+    mockedFetchMetadata.mockResolvedValue(okMetadata());
+    const transaction = {
+      from: SENDER_FRIENDLY,
+      // single-message format: top-level address/amount, no messages[]
+      address: RECIPIENT_FRIENDLY,
+      amount: "100",
+    };
+    const input: TransactionJsonInput = {
+      kind: "transaction_json",
+      raw: JSON.stringify(transaction),
+      normalized: JSON.stringify(transaction),
+      transaction,
+    };
+
+    const result = await scanTransactionWithEmulation(enabledClient, input, baseStaticContext);
+
+    expect(ruleIds(result.findings)).toEqual(["EMULATION_SKIPPED_NO_MESSAGES"]);
+    expect(ruleIds(result.findings)).not.toContain("TRANSACTION_MALFORMED_MESSAGE");
     expect(mockedBuildBoc).not.toHaveBeenCalled();
     expect(mockedEmulate).not.toHaveBeenCalled();
   });

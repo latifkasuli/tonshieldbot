@@ -49,7 +49,12 @@ export const emulateMessageToWallet = async (
     actions: response.event.actions.map(toEmulatedAction),
     risk: toEmulatedRisk(response.risk),
     trace: {
-      aborted: !response.trace.transaction.success,
+      // Read `aborted` directly from the SDK shape rather than inferring it
+      // from `!success`. The two flags are semantically distinct in TVM:
+      // `success` reflects overall outcome (a bounce can leave it true),
+      // while `aborted` is the canonical compute-phase failure flag and is
+      // what the EMULATION_ABORTED rule is documented against in spec §9.3.3.
+      aborted: response.trace.transaction.aborted,
       isScam: response.event.isScam,
     },
   };

@@ -95,6 +95,14 @@ export const scanTransactionWithEmulation = async (
 
   const messagesResult = parseTonConnectMessages(input.transaction);
 
+  if (messagesResult.status === "no_messages_field") {
+    // Single-message format input — static decoder accepts it, emulator
+    // can't (we'd need to synthesise a TON Connect messages[] from the
+    // top-level fields, which is PR-D scope at the earliest). Skip cleanly
+    // so the static report stays consistent with M1.5 behaviour.
+    return single(emulationFinding("EMULATION_SKIPPED_NO_MESSAGES"));
+  }
+
   if (messagesResult.status === "malformed") {
     // The parser is strict: any structurally bad entry rejects the whole
     // request. Emulating only the well-formed subset would silently truncate
@@ -408,7 +416,17 @@ const extractSenderAddress = (
 
 type TonConnectMessagesParseResult =
   | { readonly status: "ok"; readonly messages: readonly TonConnectMessage[] }
-  | { readonly status: "malformed"; readonly reason: string; readonly index: number | null };
+  | { readonly status: "malformed"; readonly reason: string; readonly index: number | null }
+  /**
+   * Transaction has no `messages` field at all. The M1.5 static decoder
+   * accepts a permissive single-message format (top-level `to`/`value`
+   * etc.) which is valid input by its standards — surfacing
+   * `TRANSACTION_MALFORMED_MESSAGE` would falsely contradict the static
+   * decode. We skip emulation gracefully via `EMULATION_SKIPPED_NO_MESSAGES`
+   * instead. (PR-D scope: optionally support the single-message shape end-
+   * to-end if it proves useful.)
+   */
+  | { readonly status: "no_messages_field" };
 
 /**
  * Extracts the messages array from a TON Connect transaction object as a
@@ -437,12 +455,21 @@ type TonConnectMessagesParseResult =
 const parseTonConnectMessages = (
   transaction: Readonly<Record<string, unknown>>,
 ): TonConnectMessagesParseResult => {
-  const { messages: raw } = transaction;
+  const raw = transaction.messages;
+
+  // Distinguish "field absent" from "field present but wrong type":
+  //   - absent → static decode might still produce a valid report via the
+  //     single-message fallback (top-level address/amount); skip emulation
+  //     gracefully to preserve M1.5 backwards compat.
+  //   - present but not an array → malformed (the dApp has a real bug).
+  if (raw === undefined) {
+    return { status: "no_messages_field" };
+  }
 
   if (!Array.isArray(raw)) {
     return {
       status: "malformed",
-      reason: "messages field is missing or not an array",
+      reason: "messages field is not an array",
       index: null,
     };
   }
@@ -536,6 +563,7 @@ const emulationFinding = (
   ruleId:
     | "EMULATION_NOT_CONFIGURED"
     | "EMULATION_SKIPPED_NO_SENDER"
+    | "EMULATION_SKIPPED_NO_MESSAGES"
     | "EMULATION_SENDER_UNINITIALISED",
   evidence: Readonly<Record<string, unknown>> = {},
 ): RiskFinding =>
