@@ -18,10 +18,10 @@ export interface BotDependencies {
   readonly redis: Redis | null;
   readonly emulator: TonEmulatorClient;
   /**
-   * Telegram Bot API client for M3 intelligence. Reuses the long-polling
-   * bot's own token (`BOT_TOKEN`) per §9 Q1 of m3-design.md — one BotFather
-   * bot, two roles. `enabled` is true here unconditionally because
-   * BOT_TOKEN is required by the bot's config schema.
+   * Telegram Bot API client for M3 intelligence. Uses the optional
+   * TELEGRAM_INTEL_BOT_TOKEN so the scanner identity stays separate from
+   * the long-polling UI bot. When unset, scanners emit
+   * TELEGRAM_BOT_API_NOT_CONFIGURED instead of attempting Bot API calls.
    */
   readonly telegramIntel: TelegramIntelClient;
   readonly close: () => Promise<void>;
@@ -58,7 +58,7 @@ export const createBotDependencies = (config: BotConfig): BotDependencies => {
   logger.info({ enabled: emulator.enabled, baseUrl: emulator.baseUrl }, "emulator_initialized");
 
   const telegramIntel = createTelegramIntelClient({
-    token: config.token,
+    token: config.telegramIntelBotToken ?? null,
     apiBaseUrl: config.telegramApiBaseUrl ?? "https://api.telegram.org",
   });
 

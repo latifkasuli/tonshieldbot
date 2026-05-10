@@ -3,7 +3,7 @@ import { createTelegramIntelClient } from "../src/client.ts";
 import { isTelegramIntelEnabled, loadTelegramIntelConfig } from "../src/config.ts";
 
 describe("loadTelegramIntelConfig", () => {
-  it("treats a missing TELEGRAM_BOT_TOKEN as disabled (not an error)", () => {
+  it("treats a missing TELEGRAM_INTEL_BOT_TOKEN as disabled (not an error)", () => {
     const config = loadTelegramIntelConfig({});
 
     expect(config.token).toBeNull();
@@ -16,9 +16,9 @@ describe("loadTelegramIntelConfig", () => {
     expect(config.apiBaseUrl).toBe("https://api.telegram.org");
   });
 
-  it("honours TELEGRAM_BOT_TOKEN and TELEGRAM_API_BASE_URL when both are set", () => {
+  it("honours TELEGRAM_INTEL_BOT_TOKEN and TELEGRAM_API_BASE_URL when both are set", () => {
     const config = loadTelegramIntelConfig({
-      TELEGRAM_BOT_TOKEN: "123456:ABCDEF",
+      TELEGRAM_INTEL_BOT_TOKEN: "123456:ABCDEF",
       TELEGRAM_API_BASE_URL: "https://api.example.com",
     });
 
@@ -31,11 +31,11 @@ describe("loadTelegramIntelConfig", () => {
     expect(() => loadTelegramIntelConfig({ TELEGRAM_API_BASE_URL: "not-a-url" })).toThrow();
   });
 
-  it("rejects an empty TELEGRAM_BOT_TOKEN via zod (empty string is not a valid token)", () => {
+  it("rejects an empty TELEGRAM_INTEL_BOT_TOKEN via zod (empty string is not a valid token)", () => {
     // An empty string would let grammY construct an `Api` that "looks
     // configured" but every call would 401. Better to treat empty as
     // misconfigured at load time and force the operator to fix it.
-    expect(() => loadTelegramIntelConfig({ TELEGRAM_BOT_TOKEN: "" })).toThrow();
+    expect(() => loadTelegramIntelConfig({ TELEGRAM_INTEL_BOT_TOKEN: "" })).toThrow();
   });
 });
 

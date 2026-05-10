@@ -24,9 +24,9 @@ export interface ApiDependencies {
   readonly emulator: TonEmulatorClient;
   /**
    * Telegram Bot API client for M3 intelligence. Always present — when no
-   * `TELEGRAM_BOT_TOKEN` was set, `client.enabled` is false and Telegram
-   * scanners emit `TELEGRAM_BOT_API_NOT_CONFIGURED` instead of attempting
-   * any Bot API calls.
+   * `TELEGRAM_INTEL_BOT_TOKEN` was set, `client.enabled` is false and
+   * Telegram scanners emit `TELEGRAM_BOT_API_NOT_CONFIGURED` instead of
+   * attempting any Bot API calls.
    */
   readonly telegramIntel: TelegramIntelClient;
   readonly close: () => Promise<void>;
@@ -71,7 +71,7 @@ export const createApiDependencies = (config: ApiConfig): ApiDependencies => {
   logger.info({ enabled: emulator.enabled, baseUrl: emulator.baseUrl }, "emulator_initialized");
 
   const telegramIntel = createTelegramIntelClient({
-    token: config.telegramBotToken ?? null,
+    token: config.telegramIntelBotToken ?? null,
     apiBaseUrl: config.telegramApiBaseUrl ?? "https://api.telegram.org",
   });
 

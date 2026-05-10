@@ -291,9 +291,9 @@ export const coreRules = [
     severity: "info",
     title: "Telegram Bot API disabled in this deployment",
     description:
-      "TELEGRAM_BOT_TOKEN is not configured in this environment. Telegram-side scans run in static-only mode (handle pattern checks against the watchlist) without Bot API enrichment.",
+      "TELEGRAM_INTEL_BOT_TOKEN is not configured in this environment. Telegram-side scans run in static-only mode (handle pattern checks against the watchlist) without Bot API enrichment.",
     recommendation:
-      "If you operate this instance, set TELEGRAM_BOT_TOKEN to enable Bot API reads (getChat, getUserGifts, getChatGifts, getAvailableGifts).",
+      "If you operate this instance, set TELEGRAM_INTEL_BOT_TOKEN to enable Bot API reads (getChat, getUserGifts, getChatGifts, getAvailableGifts).",
     defaultScoreDelta: 5,
   },
   {
