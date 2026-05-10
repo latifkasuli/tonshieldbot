@@ -17,6 +17,7 @@ import type { Action, MessageConsequences, Risk } from "@ton-api/client";
 import type { TonEmulatorClient } from "./client.ts";
 import {
   type EmulatedAction,
+  type EmulatedActionDetails,
   type EmulatedActionKind,
   type EmulatedRisk,
   type EmulationResult,
@@ -119,7 +120,37 @@ const toEmulatedAction = (action: Action): EmulatedAction => {
     status: action.status,
     simplePreview: action.simplePreview.description,
     rawType,
+    details: extractDetails(action),
   };
+};
+
+/**
+ * Extracts structured per-kind fields from TONAPI's typed action subobjects.
+ * Returns `null` for kinds not in PR-D2's deterministic-diff scope.
+ *
+ * The check is double-keyed (`action.type === "..."` AND the subobject is
+ * present) because TONAPI populates only the subobject matching the action
+ * type — reading the wrong one would yield `undefined`. We never fall back
+ * to `simplePreview` parsing; that text is for display, not for diff logic.
+ */
+const extractDetails = (action: Action): EmulatedActionDetails | null => {
+  if (action.type === "TonTransfer" && action.TonTransfer !== undefined) {
+    return {
+      kind: "ton_transfer",
+      recipient: action.TonTransfer.recipient.address.toRawString(),
+      amountNano: action.TonTransfer.amount,
+    };
+  }
+
+  if (action.type === "ContractDeploy" && action.ContractDeploy !== undefined) {
+    return {
+      kind: "contract_deploy",
+      address: action.ContractDeploy.address.toRawString(),
+      interfaces: action.ContractDeploy.interfaces,
+    };
+  }
+
+  return null;
 };
 
 const toEmulatedRisk = (risk: Risk): EmulatedRisk => ({

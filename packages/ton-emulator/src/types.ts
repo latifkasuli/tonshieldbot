@@ -83,6 +83,37 @@ export interface EmulatedRisk {
   readonly totalEquivalentUsd: number | null;
 }
 
+/**
+ * Structured per-kind details lifted directly from TONAPI's typed action
+ * subobjects (`Action.TonTransfer`, `Action.ContractDeploy`, …). Populated
+ * ONLY for kinds the diff module compares against the static decode; for all
+ * other kinds this is `null` and the diff module ignores the action.
+ *
+ * The contract here is explicit: no human-readable text is ever pulled from
+ * `simplePreview` to populate these fields. Everything comes from TONAPI's
+ * structured response. Adding more kinds (jetton, NFT, …) is intentional
+ * future work — those operations have layering between static payload
+ * semantics and emulated effect that a naive 1:1 diff would over-flag.
+ *
+ * Addresses are stored as raw `"0:hex"` form (via `Address.toRawString()`)
+ * so equality comparisons across friendly/raw input forms are exact.
+ */
+export type EmulatedActionDetails =
+  | {
+      readonly kind: "ton_transfer";
+      /** Recipient address in raw `"0:hex"` form. */
+      readonly recipient: string;
+      /** Amount in nanotons, as TONAPI reported it. */
+      readonly amountNano: bigint;
+    }
+  | {
+      readonly kind: "contract_deploy";
+      /** Address of the newly-deployed contract, in raw `"0:hex"` form. */
+      readonly address: string;
+      /** TONAPI-detected interfaces on the deployed code. */
+      readonly interfaces: readonly string[];
+    };
+
 /** A single high-level action TONAPI extracted from the emulated trace. */
 export interface EmulatedAction {
   readonly kind: EmulatedActionKind;
@@ -92,6 +123,11 @@ export interface EmulatedAction {
   readonly simplePreview: string;
   /** The raw `Action.type` string, preserved verbatim for evidence/debugging. */
   readonly rawType: string;
+  /**
+   * Structured fields for kinds the diff module compares deterministically.
+   * `null` for kinds not yet in scope (jetton, NFT, swap, stake, …).
+   */
+  readonly details: EmulatedActionDetails | null;
 }
 
 /**

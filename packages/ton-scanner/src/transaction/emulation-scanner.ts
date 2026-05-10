@@ -12,6 +12,8 @@ import {
   type TonEmulatorClient,
   type TonConnectMessage,
 } from "@tonshield/ton-emulator";
+import { diffStaticVsEmulated, type DiffMismatch } from "./diff.ts";
+import type { ParsedMessage } from "./types.ts";
 
 export interface EmulationScanResult {
   readonly findings: readonly RiskFinding[];
@@ -52,7 +54,17 @@ export const scanTransactionWithEmulation = async (
   client: TonEmulatorClient | undefined,
   input: TransactionJsonInput,
   staticContext: {
-    readonly staticActionCount: number;
+    /**
+     * Parsed per-message decode from the static scanner. Drives the PR-D2
+     * deterministic diff (destination/amount comparison) against emulated
+     * `ton_transfer` actions.
+     */
+    readonly staticMessages: readonly ParsedMessage[];
+    /**
+     * True when any static message carried a `stateInit` field. Used to
+     * suppress `EMULATION_DEPLOYS_UNKNOWN_CONTRACT` when the dApp explicitly
+     * declared a deploy.
+     */
     readonly staticHasStateInit: boolean;
   },
 ): Promise<EmulationScanResult> => {
@@ -180,7 +192,7 @@ const mapOkResult = (
   result: Extract<EmulationResult, { status: "ok" }>,
   senderAddress: Address,
   staticContext: {
-    readonly staticActionCount: number;
+    readonly staticMessages: readonly ParsedMessage[];
     readonly staticHasStateInit: boolean;
   },
   metadata: SenderMetadata,
@@ -244,22 +256,36 @@ const mapOkResult = (
     );
   }
 
-  // Conservative diff signals (per PR-C scope). These are deliberately not
-  // exhaustive — fancier matching (per-message destination/amount diff)
-  // lives in PR-D's expansion if it proves useful in practice.
+  // Structured static-vs-emulated diff (PR-D2). Replaces the earlier
+  // count-based heuristic — we now compare actual destinations and amounts
+  // for ton_transfer pairs, and only flag unmatched emulated transfers as
+  // hidden actions. Jetton/NFT diffing is deliberately out of scope here
+  // because the static and emulated views live at different layers.
+  const diff = diffStaticVsEmulated({
+    staticMessages: staticContext.staticMessages,
+    emulatedActions: result.actions,
+  });
 
-  // Hidden actions: emulated event has more actions than the static decoder
-  // produced. Common when downstream Jetton notifications, NFT royalty
-  // forwards, or multisig fan-out happen, but also surfaces messages the
-  // wallet's signed body emits that the dApp didn't put in the public
-  // `messages[]` (the most security-relevant case).
-  if (result.actions.length > staticContext.staticActionCount) {
+  for (const mismatch of diff.mismatches) {
+    findings.push(
+      createFinding({
+        confidence: "high",
+        evidence: mismatchEvidence(mismatch),
+        rule: getCoreRule("EMULATION_MISMATCH"),
+      }),
+    );
+  }
+
+  for (const hidden of diff.hiddenActions) {
     findings.push(
       createFinding({
         confidence: "medium",
         evidence: {
-          staticActionCount: staticContext.staticActionCount,
-          emulatedActionCount: result.actions.length,
+          kind: hidden.kind,
+          rawType: hidden.rawType,
+          emulatedActionIndex: hidden.emulatedActionIndex,
+          recipient: hidden.recipient,
+          amountNano: hidden.amountNano,
         },
         rule: getCoreRule("EMULATION_REVEALED_HIDDEN_ACTION"),
       }),
@@ -268,7 +294,8 @@ const mapOkResult = (
 
   // ContractDeploy in emulation but no `stateInit` field on any static
   // message → the deployment is happening as a side effect, not from the
-  // visible transaction body. High-signal.
+  // visible transaction body. High-signal — and intentionally NOT replaced
+  // by the diff module (which only diffs comparable ton_transfer pairs).
   const emulatedDeploy = result.actions.some((a) => a.kind === "contract_deploy");
 
   if (emulatedDeploy && !staticContext.staticHasStateInit) {
@@ -282,6 +309,30 @@ const mapOkResult = (
   }
 
   return { findings, actions };
+};
+
+/**
+ * Builds the JSON-safe evidence record for an `EMULATION_MISMATCH` finding.
+ * Splitting destination vs amount cases keeps the evidence keys flat and
+ * the consumer doesn't have to switch on the mismatch kind to render it.
+ */
+const mismatchEvidence = (mismatch: DiffMismatch): Readonly<Record<string, unknown>> => {
+  if (mismatch.kind === "ton_transfer_destination") {
+    return {
+      field: "destination",
+      messageIndex: mismatch.messageIndex,
+      staticDestination: mismatch.staticDestination,
+      emulatedDestination: mismatch.emulatedDestination,
+    };
+  }
+
+  return {
+    field: "amount",
+    messageIndex: mismatch.messageIndex,
+    destination: mismatch.destination,
+    staticAmountNano: mismatch.staticAmountNano,
+    emulatedAmountNano: mismatch.emulatedAmountNano,
+  };
 };
 
 // ── helpers ─────────────────────────────────────────────────────────────────
