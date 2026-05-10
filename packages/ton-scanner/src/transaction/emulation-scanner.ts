@@ -93,7 +93,26 @@ export const scanTransactionWithEmulation = async (
     return EMPTY_RESULT;
   }
 
-  const messages = parseTonConnectMessages(input.transaction);
+  const messagesResult = parseTonConnectMessages(input.transaction);
+
+  if (messagesResult.status === "malformed") {
+    // The parser is strict: any structurally bad entry rejects the whole
+    // request. Emulating only the well-formed subset would silently truncate
+    // the user-intended action list and produce a misleading risk report —
+    // TON Connect `messages` is semantically ordered.
+    return single(
+      createFinding({
+        confidence: "high",
+        evidence: {
+          source: "emulation_scanner_parser",
+          reason: messagesResult.reason,
+          ...(messagesResult.index === null ? {} : { index: messagesResult.index }),
+        },
+        rule: getCoreRule("TRANSACTION_MALFORMED_MESSAGE"),
+      }),
+    );
+  }
+
   let boc: string;
 
   try {
@@ -103,7 +122,7 @@ export const scanTransactionWithEmulation = async (
       publicKey: metadataResult.metadata.publicKey,
       seqno: metadataResult.metadata.seqno,
       networkGlobalId: metadataResult.metadata.networkGlobalId,
-      messages,
+      messages: messagesResult.messages,
     });
   } catch (error) {
     return single(
@@ -387,53 +406,119 @@ const extractSenderAddress = (
   }
 };
 
+type TonConnectMessagesParseResult =
+  | { readonly status: "ok"; readonly messages: readonly TonConnectMessage[] }
+  | { readonly status: "malformed"; readonly reason: string; readonly index: number | null };
+
 /**
  * Extracts the messages array from a TON Connect transaction object as a
- * `TonConnectMessage[]`. Defensive about the input shape — fields that aren't
- * the right type are dropped silently here, then the request builder throws
- * for genuinely malformed messages and we surface that via
- * `TRANSACTION_MALFORMED_MESSAGE`.
+ * `TonConnectMessage[]`. Strictly all-or-nothing: if any entry is structurally
+ * malformed, the entire request is rejected.
+ *
+ * Why all-or-nothing: TON Connect `messages` is a semantically ordered batch
+ * — emulating only the well-formed subset would silently truncate the
+ * user's intended action list and produce a misleading risk report. A
+ * dropped message is the most security-relevant kind of corruption (a real
+ * wallet would refuse to sign), so we surface it as
+ * `TRANSACTION_MALFORMED_MESSAGE` and skip emulation entirely.
+ *
+ * Validation:
+ *   - `messages` MUST be a non-empty array (TON Connect requires ≥ 1
+ *     message per transaction)
+ *   - every entry MUST be an object/record
+ *   - every entry MUST have string `address` and string `amount` fields
+ *   - `payload` / `stateInit` / `extraCurrency` are optional but, if
+ *     present, must be the right type (string / string / object)
+ *
+ * Field-value validation (e.g. amount must be a decimal-integer string,
+ * address must be friendly form) is the request builder's job; this parser
+ * only enforces structural shape.
  */
 const parseTonConnectMessages = (
   transaction: Readonly<Record<string, unknown>>,
-): readonly TonConnectMessage[] => {
+): TonConnectMessagesParseResult => {
   const { messages: raw } = transaction;
 
   if (!Array.isArray(raw)) {
-    return [];
+    return {
+      status: "malformed",
+      reason: "messages field is missing or not an array",
+      index: null,
+    };
   }
 
-  return raw.flatMap((entry): readonly TonConnectMessage[] => {
-    if (typeof entry !== "object" || entry === null) {
-      return [];
+  if (raw.length === 0) {
+    return {
+      status: "malformed",
+      reason: "messages array is empty (TON Connect requires at least one message)",
+      index: null,
+    };
+  }
+
+  const messages: TonConnectMessage[] = [];
+  // After `Array.isArray(raw)`, TS narrows the contents to `any` (because
+  // `raw` came from an index access on `Record<string, unknown>`). Re-cast
+  // to `unknown[]` so the loop body is forced to narrow each entry.
+  const entries = raw as readonly unknown[];
+
+  for (let index = 0; index < entries.length; index += 1) {
+    const entry = entries[index];
+
+    if (typeof entry !== "object" || entry === null || Array.isArray(entry)) {
+      return {
+        status: "malformed",
+        reason: "message entry is not an object",
+        index,
+      };
     }
 
     const message = entry as Readonly<Record<string, unknown>>;
     const address = getString(message, "address");
+
+    if (address === null) {
+      return {
+        status: "malformed",
+        reason: "message is missing required string `address` field",
+        index,
+      };
+    }
+
     const amount = getString(message, "amount");
 
-    if (address === null || amount === null) {
-      return [];
+    if (amount === null) {
+      return {
+        status: "malformed",
+        reason: "message is missing required string `amount` field",
+        index,
+      };
     }
 
     const payload = getString(message, "payload");
     const stateInit = getString(message, "stateInit") ?? getString(message, "state_init");
-    const extra = message.extraCurrency ?? message.extra_currency;
+    const extraRaw = message.extraCurrency ?? message.extra_currency;
 
-    return [
-      {
-        address,
-        amount,
-        ...(payload === null ? {} : { payload }),
-        ...(stateInit === null ? {} : { stateInit }),
-        ...(isStringRecord(extra) ? { extraCurrency: extra } : {}),
-      },
-    ];
-  });
+    if (extraRaw !== undefined && !isStringRecord(extraRaw)) {
+      return {
+        status: "malformed",
+        reason: "message `extraCurrency` field must be a string→string map",
+        index,
+      };
+    }
+
+    messages.push({
+      address,
+      amount,
+      ...(payload === null ? {} : { payload }),
+      ...(stateInit === null ? {} : { stateInit }),
+      ...(extraRaw === undefined ? {} : { extraCurrency: extraRaw }),
+    });
+  }
+
+  return { status: "ok", messages };
 };
 
 const isStringRecord = (value: unknown): value is Readonly<Record<string, string>> => {
-  if (typeof value !== "object" || value === null) {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return false;
   }
 

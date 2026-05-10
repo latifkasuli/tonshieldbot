@@ -5,7 +5,7 @@ import type { LoggerFlavor } from "@tonshield/logger";
 import { createGrammyRateLimit, defaultTierLimits } from "@tonshield/rate-limit";
 import { TtlFetchCache } from "@tonshield/safe-fetch";
 import { canonicalInputHash } from "@tonshield/storage";
-import { classifyInput, createBasicScan } from "@tonshield/ton-scanner";
+import { classifyInput, createBasicScan, isScanResultCacheable } from "@tonshield/ton-scanner";
 import { loadBotConfig } from "./config.ts";
 import { createBotDependencies } from "./deps.ts";
 import { formatScanReport, welcomeMessage } from "./messages.ts";
@@ -43,7 +43,13 @@ bot.on("message:text", async (ctx) => {
   const rawInput = ctx.message.text;
   const classified = classifyInput(rawInput);
   const inputHash = canonicalInputHash(classified);
-  const cached = await deps.storage.reports.findByInputHash(inputHash);
+  // Emulation runs against current blockchain state, so transaction-JSON
+  // scans can't be safely served from cache when emulation is enabled —
+  // see `isScanResultCacheable` for the full rationale.
+  const cacheable = isScanResultCacheable(classified, {
+    emulatorEnabled: deps.emulator.enabled,
+  });
+  const cached = cacheable ? await deps.storage.reports.findByInputHash(inputHash) : null;
 
   let report;
 

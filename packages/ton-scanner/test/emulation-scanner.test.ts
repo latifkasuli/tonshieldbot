@@ -209,6 +209,103 @@ describe("scanTransactionWithEmulation degradation paths", () => {
     expect(mockedEmulate).not.toHaveBeenCalled();
   });
 
+  // ── all-or-nothing structural validation of `messages[]` ─────────────────
+  //
+  // TON Connect `messages` is semantically ordered. Emulating only the
+  // well-formed subset would produce a misleading risk report, so any
+  // structural defect rejects the whole request as TRANSACTION_MALFORMED_MESSAGE.
+
+  it.each([
+    ["messages field absent", { from: SENDER_FRIENDLY }, /missing or not an array/],
+    [
+      "messages is not an array",
+      { from: SENDER_FRIENDLY, messages: "not-an-array" },
+      /missing or not an array/,
+    ],
+    [
+      "messages array is empty",
+      { from: SENDER_FRIENDLY, messages: [] },
+      /requires at least one message/,
+    ],
+    [
+      "entry is not an object",
+      { from: SENDER_FRIENDLY, messages: ["not-an-object"] },
+      /not an object/,
+    ],
+    [
+      "entry missing address",
+      { from: SENDER_FRIENDLY, messages: [{ amount: "100" }] },
+      /missing required string `address`/,
+    ],
+    [
+      "entry missing amount",
+      { from: SENDER_FRIENDLY, messages: [{ address: RECIPIENT_FRIENDLY }] },
+      /missing required string `amount`/,
+    ],
+    [
+      "entry has non-string address",
+      { from: SENDER_FRIENDLY, messages: [{ address: 123, amount: "100" }] },
+      /missing required string `address`/,
+    ],
+    [
+      "entry has non-string amount",
+      { from: SENDER_FRIENDLY, messages: [{ address: RECIPIENT_FRIENDLY, amount: 100 }] },
+      /missing required string `amount`/,
+    ],
+    [
+      "extraCurrency is not a string→string map",
+      {
+        from: SENDER_FRIENDLY,
+        messages: [{ address: RECIPIENT_FRIENDLY, amount: "100", extraCurrency: { 100: 1000 } }],
+      },
+      /string.string map/,
+    ],
+  ])("rejects whole request when %s", async (_label, transaction, expectedReason) => {
+    mockedFetchMetadata.mockResolvedValue(okMetadata());
+
+    const input: TransactionJsonInput = {
+      kind: "transaction_json",
+      raw: JSON.stringify(transaction),
+      normalized: JSON.stringify(transaction),
+      transaction,
+    };
+
+    const result = await scanTransactionWithEmulation(enabledClient, input, baseStaticContext);
+
+    expect(ruleIds(result.findings)).toEqual(["TRANSACTION_MALFORMED_MESSAGE"]);
+    expect(result.findings[0]?.evidence).toMatchObject({
+      source: "emulation_scanner_parser",
+    });
+    expect(String(result.findings[0]?.evidence.reason)).toMatch(expectedReason);
+    // Critically: emulation MUST NOT run on a partial / silently-truncated
+    // message list. Verify the request builder is never called.
+    expect(mockedBuildBoc).not.toHaveBeenCalled();
+    expect(mockedEmulate).not.toHaveBeenCalled();
+  });
+
+  it("emits TRANSACTION_MALFORMED_MESSAGE with the bad entry's index in evidence", async () => {
+    mockedFetchMetadata.mockResolvedValue(okMetadata());
+
+    const transaction = {
+      from: SENDER_FRIENDLY,
+      messages: [
+        { address: RECIPIENT_FRIENDLY, amount: "100" },
+        { address: RECIPIENT_FRIENDLY }, // missing amount
+        { address: RECIPIENT_FRIENDLY, amount: "200" },
+      ],
+    };
+    const input: TransactionJsonInput = {
+      kind: "transaction_json",
+      raw: JSON.stringify(transaction),
+      normalized: JSON.stringify(transaction),
+      transaction,
+    };
+
+    const result = await scanTransactionWithEmulation(enabledClient, input, baseStaticContext);
+
+    expect(result.findings[0]?.evidence).toMatchObject({ index: 1 });
+  });
+
   it("silently skips when the emulator call returns a failed status (PR-D classifies)", async () => {
     mockedFetchMetadata.mockResolvedValue(okMetadata());
     mockedEmulate.mockResolvedValue({ status: "failed", reason: "rate_limited", httpStatus: 429 });

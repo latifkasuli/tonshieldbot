@@ -10,7 +10,7 @@ import type { RateLimiter } from "@tonshield/rate-limit";
 import { TtlFetchCache } from "@tonshield/safe-fetch";
 import { canonicalInputHash, type ApiKeyStore, type ReportStore } from "@tonshield/storage";
 import type { TonEmulatorClient } from "@tonshield/ton-emulator";
-import { classifyInput, createBasicScan } from "@tonshield/ton-scanner";
+import { classifyInput, createBasicScan, isScanResultCacheable } from "@tonshield/ton-scanner";
 
 const scanRequestSchema = z.object({
   input: z.string().min(1),
@@ -115,7 +115,13 @@ export const createApiServer = (
 
     const classified = classifyInput(body.data.input);
     const inputHash = canonicalInputHash(classified);
-    const cached = await options.reports.findByInputHash(inputHash);
+    // Emulation runs against current blockchain state, so transaction-JSON
+    // scans can't be safely served from cache when emulation is enabled —
+    // see `isScanResultCacheable` for the full rationale.
+    const cacheable = isScanResultCacheable(classified, {
+      emulatorEnabled: options.emulator.enabled,
+    });
+    const cached = cacheable ? await options.reports.findByInputHash(inputHash) : null;
 
     if (cached !== null) {
       c.var.log.info(
