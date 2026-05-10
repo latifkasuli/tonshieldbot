@@ -14,3 +14,4 @@ docs/research/
 
 .DS_Store
 *.log
+packages/*/.smoke/

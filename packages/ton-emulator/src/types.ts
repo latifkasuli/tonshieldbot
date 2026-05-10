@@ -60,7 +60,7 @@ export type EmulatedActionKind = (typeof emulatedActionKinds)[number];
  * Conservative upper bound on assets that may leave the wallet if the
  * emulated message is sent and counterparties behave maliciously. Mirrors
  * `MessageConsequences.risk` from TONAPI v2. Drives several M2 findings —
- * notably `TX_SENDS_NEAR_FULL_BALANCE` (when `transferAllRemainingBalance` is
+ * notably `EMULATION_SENDS_NEAR_FULL_BALANCE` (when `transferAllRemainingBalance` is
  * true).
  */
 export interface EmulatedRisk {
