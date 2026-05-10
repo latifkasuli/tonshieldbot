@@ -13,7 +13,16 @@
 export const walletVersions = ["v3r2", "v4r2", "v5r1", "unknown"] as const;
 export type WalletVersion = (typeof walletVersions)[number];
 
-/** Per-action kinds we map from TONAPI `Action.type`. Aligned with §9.4 of the spec. */
+/**
+ * Per-action kinds mirrored 1:1 from TONAPI v2 `Action.type`. Source of truth:
+ * https://github.com/tonkeeper/tonapi-go/blob/main/api/openapi.yml (search for
+ * `Action:` schema).
+ *
+ * Keep this list complete: TONAPI emits one of these strings, and downstream
+ * exhaustive switches (`assertNever`) rely on the union covering every
+ * possibility. Missing values land as `"unknown"` at the mapping boundary,
+ * not silently as `undefined`.
+ */
 export const emulatedActionKinds = [
   "ton_transfer",
   "extra_currency_transfer",
@@ -32,6 +41,11 @@ export const emulatedActionKinds = [
   "deposit_stake",
   "withdraw_stake",
   "withdraw_stake_request",
+  "elections_deposit_stake",
+  "elections_recover_stake",
+  "deposit_token_stake",
+  "withdraw_token_stake_request",
+  "liquidity_deposit",
   "domain_renew",
   "purchase",
   "add_extension",

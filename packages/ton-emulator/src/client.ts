@@ -8,6 +8,27 @@ import type { TonEmulatorConfig } from "./config.ts";
  * means the rest of the codebase imports from `@tonshield/ton-emulator`, not
  * directly from `@ton-api/client`, so swapping providers later (or adding a
  * Toncenter fallback per §18.3 of the spec) is a single-package change.
+ *
+ * OPEN QUESTION FOR PR-B — `/v2/wallet/emulate` signature handling:
+ *   `POST /v2/wallet/emulate` returns `MessageConsequences` (which includes
+ *   the pre-computed `risk` summary we want), but unlike `/v2/traces/emulate`
+ *   and `/v2/events/emulate` it does NOT expose `ignore_signature_check` in
+ *   the current OpenAPI spec. It only takes `i18n` / `currency` query params
+ *   plus an `EmulationBoc` body.
+ *
+ *   Two scenarios, to be verified empirically before committing PR-B:
+ *     a) wallet-emulate implicitly handles unsigned messages signed with a
+ *        dummy key (the contract's own signature check would fail, but TONAPI
+ *        may bypass the check inside the wallet emulator). Then PR-B uses
+ *        `/v2/wallet/emulate` directly.
+ *     b) wallet-emulate requires a valid signature → drop to a two-call
+ *        strategy: `/v2/traces/emulate?ignore_signature_check=true` for the
+ *        action list (always works), and walk the trace ourselves to compute
+ *        the equivalent of `risk.transfer_all_remaining_balance`, etc.
+ *
+ *   PR-B must run a smoke test against a real TONAPI key with both an
+ *   uninitialised dummy-signed external message and a fresh transaction
+ *   request before settling on the strategy.
  */
 export interface TonEmulatorClient {
   /** True iff the underlying TONAPI client is authenticated. */
