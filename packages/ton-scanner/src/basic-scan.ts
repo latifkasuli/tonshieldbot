@@ -122,7 +122,7 @@ const gatherScanResult = async (input: ScanInput, deps: GatherDeps): Promise<Gat
     }
 
     const emulationResult = await scanTransactionWithEmulation(deps.emulator, input, {
-      staticActionCount: staticResult.actions.length,
+      staticMessages: staticResult.parsedMessages,
       staticHasStateInit: hasStateInit(input.transaction),
     });
 

@@ -2,10 +2,18 @@ import { createFinding, getCoreRule } from "@tonshield/risk-engine";
 import type { ActionPreview, RiskFinding, TransactionJsonInput } from "@tonshield/shared";
 import { classifyMessage } from "./action-classifier.ts";
 import { parseMessages } from "./message-parser.ts";
+import type { ParsedMessage } from "./types.ts";
 
 export interface TransactionScanResult {
   readonly findings: readonly RiskFinding[];
   readonly actions: readonly ActionPreview[];
+  /**
+   * The structured per-message decode (destination, value, payload kind,
+   * stateInit flag). Exposed so the PR-D2 diff module can pair static
+   * messages with emulated actions by position without re-parsing the
+   * transaction.
+   */
+  readonly parsedMessages: readonly ParsedMessage[];
 }
 
 export const scanTransactionJson = (input: TransactionJsonInput): TransactionScanResult => {
@@ -41,5 +49,5 @@ export const scanTransactionJson = (input: TransactionJsonInput): TransactionSca
     }
   }
 
-  return { findings, actions };
+  return { findings, actions, parsedMessages: parsed };
 };

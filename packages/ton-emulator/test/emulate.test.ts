@@ -188,3 +188,117 @@ describe("emulateMessageToWallet response mapping", () => {
     expect(result).toEqual({ status: "failed", reason: "provider_down", httpStatus: null });
   });
 });
+
+// ── structured `details` extraction for PR-D2 diff ──────────────────────────
+//
+// These tests pin the mapping from TONAPI's typed action subobjects
+// (Action.TonTransfer, Action.ContractDeploy) to our internal
+// `EmulatedActionDetails`. The diff module relies on raw "0:hex" addresses
+// and `bigint` nanoton amounts being preserved verbatim from the SDK — no
+// human-text parsing.
+
+describe("emulateMessageToWallet structured details extraction", () => {
+  const recipientRaw = "0:cdce58745d265d6f9fd0ae5c79423c991d500efbe8bf9683c79556bb45ff956d";
+  const deployRaw = "0:abcdef0000000000000000000000000000000000000000000000000000000000";
+
+  const buildResponseWithActions = (actions: readonly unknown[]): MessageConsequences => {
+    const base = buildResponse();
+    return {
+      ...base,
+      event: { ...base.event, actions: actions as never },
+    };
+  };
+
+  it("populates details.kind='ton_transfer' with raw recipient and bigint amount", async () => {
+    const action = {
+      type: "TonTransfer",
+      status: "ok",
+      simplePreview: { description: "ignore me — diff must not read this" },
+      baseTransactions: [],
+      TonTransfer: {
+        sender: { address: Address.parseRaw(recipientRaw), isScam: false, isWallet: true },
+        recipient: { address: Address.parseRaw(recipientRaw), isScam: false, isWallet: true },
+        amount: 10_000_000n,
+      },
+    };
+    const client = buildClientWithMockResponse(buildResponseWithActions([action]));
+
+    const result = await emulateMessageToWallet(client, DUMMY_BOC);
+
+    expect(result.status).toBe("ok");
+    if (result.status === "ok") {
+      expect(result.actions[0]?.details).toEqual({
+        kind: "ton_transfer",
+        recipient: recipientRaw,
+        amountNano: 10_000_000n,
+      });
+    }
+  });
+
+  it("populates details.kind='contract_deploy' with raw address and interfaces", async () => {
+    const action = {
+      type: "ContractDeploy",
+      status: "ok",
+      simplePreview: { description: "Deploy NFT item" },
+      baseTransactions: [],
+      ContractDeploy: {
+        address: Address.parseRaw(deployRaw),
+        interfaces: ["nft_item", "nft_royalty"],
+      },
+    };
+    const client = buildClientWithMockResponse(buildResponseWithActions([action]));
+
+    const result = await emulateMessageToWallet(client, DUMMY_BOC);
+
+    expect(result.status).toBe("ok");
+    if (result.status === "ok") {
+      expect(result.actions[0]?.details).toEqual({
+        kind: "contract_deploy",
+        address: deployRaw,
+        interfaces: ["nft_item", "nft_royalty"],
+      });
+    }
+  });
+
+  it("leaves details null for kinds not in PR-D2 diff scope (e.g. JettonTransfer)", async () => {
+    const action = {
+      type: "JettonTransfer",
+      status: "ok",
+      simplePreview: { description: "Transfer 100 USDT" },
+      baseTransactions: [],
+      JettonTransfer: {
+        /* opaque — we deliberately ignore */
+      },
+    };
+    const client = buildClientWithMockResponse(buildResponseWithActions([action]));
+
+    const result = await emulateMessageToWallet(client, DUMMY_BOC);
+
+    expect(result.status).toBe("ok");
+    if (result.status === "ok") {
+      expect(result.actions[0]?.details).toBeNull();
+      expect(result.actions[0]?.kind).toBe("jetton_transfer");
+    }
+  });
+
+  it("leaves details null when the type-tagged subobject is missing (defensive)", async () => {
+    // TONAPI sometimes ships type='TonTransfer' with no TonTransfer subobject
+    // for actions that failed at the boundary. We must not throw or invent
+    // data — just degrade to details=null and let the diff module skip it.
+    const action = {
+      type: "TonTransfer",
+      status: "failed",
+      simplePreview: { description: "Failed" },
+      baseTransactions: [],
+      // no TonTransfer subobject
+    };
+    const client = buildClientWithMockResponse(buildResponseWithActions([action]));
+
+    const result = await emulateMessageToWallet(client, DUMMY_BOC);
+
+    expect(result.status).toBe("ok");
+    if (result.status === "ok") {
+      expect(result.actions[0]?.details).toBeNull();
+    }
+  });
+});

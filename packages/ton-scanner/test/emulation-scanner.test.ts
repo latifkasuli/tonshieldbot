@@ -30,6 +30,10 @@ const mockedBuildBoc = vi.mocked(buildExternalMessageBoc);
 
 const SENDER_FRIENDLY = "UQAQxxpzxmEVU0Lu8U0zNTxBzXIWPvo263TIN1OQM9YvxsnV";
 const RECIPIENT_FRIENDLY = "UQDNzlh0XSZdb5_Qrlx5QjyZHVAO74v5oMeVVrtF_5Vt1rIt";
+// Raw form of RECIPIENT_FRIENDLY. Used in default emulation action fixtures
+// so the diff module pairs the static and emulated side cleanly when tests
+// don't override.
+const RECIPIENT_RAW = "0:cdce58745d265d6f9fd0ae5c79423c991d500eef8bf9a0c79556bb45ff956dd6";
 
 const enabledClient: TonEmulatorClient = {
   enabled: true,
@@ -75,6 +79,10 @@ const okEmulationResult = (
       status: "ok",
       simplePreview: "Transferring 1 TON",
       rawType: "TonTransfer",
+      // Pair with baseStaticContext's lone TON send (10 nanoton to RECIPIENT)
+      // so the diff module produces no mismatches by default. Tests that
+      // care about the diff override this to introduce intentional defects.
+      details: { kind: "ton_transfer", recipient: RECIPIENT_RAW, amountNano: 10n },
     },
   ],
   risk: {
@@ -91,7 +99,21 @@ const okEmulationResult = (
 const ruleIds = (findings: readonly { ruleId: string }[]): readonly string[] =>
   findings.map((f) => f.ruleId);
 
-const baseStaticContext = { staticActionCount: 1, staticHasStateInit: false };
+// One static TON send to the recipient at 10 nanoton — paired by position
+// with the okEmulationResult()'s single TonTransfer for the OK-path tests.
+// Tests that exercise the diff module override this with richer fixtures.
+const baseStaticContext = {
+  staticMessages: [
+    {
+      to: RECIPIENT_FRIENDLY,
+      value: 10n,
+      bounce: false,
+      payload: { kind: "none" as const },
+      hasStateInit: false,
+    },
+  ],
+  staticHasStateInit: false,
+};
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -527,6 +549,7 @@ describe("scanTransactionWithEmulation OK responses", () => {
             status: "ok",
             simplePreview: "Add extension",
             rawType: "AddExtension",
+            details: null,
           },
         ],
       }),
@@ -551,6 +574,7 @@ describe("scanTransactionWithEmulation OK responses", () => {
             status: "ok",
             simplePreview: "Disable signature auth",
             rawType: "SetSignatureAllowedAction",
+            details: null,
           },
         ],
       }),
@@ -589,7 +613,14 @@ describe("scanTransactionWithEmulation OK responses", () => {
     expect(ruleIds(result.findings)).toContain("EMULATION_SCAM_PATTERN_DETECTED");
   });
 
-  it("emits EMULATION_REVEALED_HIDDEN_ACTION when emulated action count exceeds static count", async () => {
+  // ── PR-D2 structured diff: scanner-level integration ────────────────────
+  //
+  // The diff logic itself is covered exhaustively in diff.test.ts. These
+  // tests pin only the integration: the scanner correctly threads
+  // staticContext.staticMessages through and maps DiffMismatch / DiffHiddenAction
+  // entries to the right findings with the right evidence shape.
+
+  it("emits EMULATION_REVEALED_HIDDEN_ACTION when emulator produces an extra TonTransfer with no static counterpart", async () => {
     mockedEmulate.mockResolvedValue(
       okEmulationResult({
         actions: [
@@ -598,46 +629,123 @@ describe("scanTransactionWithEmulation OK responses", () => {
             status: "ok",
             simplePreview: "Send 1 TON",
             rawType: "TonTransfer",
+            details: { kind: "ton_transfer", recipient: RECIPIENT_RAW, amountNano: 10n },
           },
           {
             kind: "jetton_transfer",
             status: "ok",
-            simplePreview: "Hidden Jetton notification",
+            simplePreview: "Jetton notification (not flagged — out of D2 scope)",
             rawType: "JettonTransfer",
+            details: null,
           },
           {
             kind: "ton_transfer",
             status: "ok",
-            simplePreview: "Royalty forward",
+            simplePreview: "Hidden second TON transfer",
             rawType: "TonTransfer",
+            details: {
+              kind: "ton_transfer",
+              recipient: "0:abcdef0000000000000000000000000000000000000000000000000000000000",
+              amountNano: 50_000_000n,
+            },
           },
         ],
       }),
     );
 
-    const result = await scanTransactionWithEmulation(enabledClient, buildInput(), {
-      staticActionCount: 1,
-      staticHasStateInit: false,
-    });
+    const result = await scanTransactionWithEmulation(
+      enabledClient,
+      buildInput(),
+      baseStaticContext,
+    );
 
     expect(ruleIds(result.findings)).toContain("EMULATION_REVEALED_HIDDEN_ACTION");
     expect(
       result.findings.find((f) => f.ruleId === "EMULATION_REVEALED_HIDDEN_ACTION")?.evidence,
     ).toMatchObject({
-      staticActionCount: 1,
-      emulatedActionCount: 3,
+      kind: "ton_transfer",
+      rawType: "TonTransfer",
+      emulatedActionIndex: 2,
+      recipient: "0:abcdef0000000000000000000000000000000000000000000000000000000000",
+      amountNano: "50000000",
     });
   });
 
-  it("does NOT emit hidden-action finding when counts match", async () => {
+  it("does NOT emit hidden-action finding when every emulated TonTransfer has a static counterpart", async () => {
     mockedEmulate.mockResolvedValue(okEmulationResult());
 
-    const result = await scanTransactionWithEmulation(enabledClient, buildInput(), {
-      staticActionCount: 1,
-      staticHasStateInit: false,
-    });
+    const result = await scanTransactionWithEmulation(
+      enabledClient,
+      buildInput(),
+      baseStaticContext,
+    );
 
     expect(ruleIds(result.findings)).not.toContain("EMULATION_REVEALED_HIDDEN_ACTION");
+  });
+
+  it("emits EMULATION_MISMATCH with destination evidence when emulated recipient differs", async () => {
+    mockedEmulate.mockResolvedValue(
+      okEmulationResult({
+        actions: [
+          {
+            kind: "ton_transfer",
+            status: "ok",
+            simplePreview: "Send 1 TON to attacker",
+            rawType: "TonTransfer",
+            details: {
+              kind: "ton_transfer",
+              recipient: "0:abcdef0000000000000000000000000000000000000000000000000000000000",
+              amountNano: 10n,
+            },
+          },
+        ],
+      }),
+    );
+
+    const result = await scanTransactionWithEmulation(
+      enabledClient,
+      buildInput(),
+      baseStaticContext,
+    );
+
+    expect(ruleIds(result.findings)).toContain("EMULATION_MISMATCH");
+    expect(result.findings.find((f) => f.ruleId === "EMULATION_MISMATCH")?.evidence).toMatchObject({
+      field: "destination",
+      messageIndex: 0,
+      staticDestination: RECIPIENT_FRIENDLY,
+      emulatedDestination: "0:abcdef0000000000000000000000000000000000000000000000000000000000",
+    });
+  });
+
+  it("emits EMULATION_MISMATCH with amount evidence when emulated amount differs but destination matches", async () => {
+    mockedEmulate.mockResolvedValue(
+      okEmulationResult({
+        actions: [
+          {
+            kind: "ton_transfer",
+            status: "ok",
+            simplePreview: "Send way more than declared",
+            rawType: "TonTransfer",
+            details: { kind: "ton_transfer", recipient: RECIPIENT_RAW, amountNano: 999_999_999n },
+          },
+        ],
+      }),
+    );
+
+    const result = await scanTransactionWithEmulation(
+      enabledClient,
+      buildInput(),
+      baseStaticContext,
+    );
+
+    const mismatch = result.findings.find((f) => f.ruleId === "EMULATION_MISMATCH");
+    expect(mismatch?.evidence).toMatchObject({
+      field: "amount",
+      messageIndex: 0,
+      destination: RECIPIENT_RAW,
+      staticAmountNano: "10",
+      emulatedAmountNano: "999999999",
+    });
   });
 
   it("emits EMULATION_DEPLOYS_UNKNOWN_CONTRACT when emulator deploys but no static stateInit", async () => {
@@ -649,13 +757,18 @@ describe("scanTransactionWithEmulation OK responses", () => {
             status: "ok",
             simplePreview: "Deploy",
             rawType: "ContractDeploy",
+            details: {
+              kind: "contract_deploy",
+              address: "0:abcdef0000000000000000000000000000000000000000000000000000000000",
+              interfaces: ["nft_item"],
+            },
           },
         ],
       }),
     );
 
     const result = await scanTransactionWithEmulation(enabledClient, buildInput(), {
-      staticActionCount: 1,
+      ...baseStaticContext,
       staticHasStateInit: false,
     });
 
@@ -671,13 +784,18 @@ describe("scanTransactionWithEmulation OK responses", () => {
             status: "ok",
             simplePreview: "Deploy",
             rawType: "ContractDeploy",
+            details: {
+              kind: "contract_deploy",
+              address: "0:abcdef0000000000000000000000000000000000000000000000000000000000",
+              interfaces: ["nft_item"],
+            },
           },
         ],
       }),
     );
 
     const result = await scanTransactionWithEmulation(enabledClient, buildInput(), {
-      staticActionCount: 1,
+      ...baseStaticContext,
       staticHasStateInit: true,
     });
 
@@ -693,6 +811,7 @@ describe("scanTransactionWithEmulation OK responses", () => {
             status: "ok",
             simplePreview: "Transferring 250 USDT to EQAB...",
             rawType: "JettonTransfer",
+            details: null,
           },
         ],
       }),
@@ -711,17 +830,36 @@ describe("scanTransactionWithEmulation OK responses", () => {
     mockedEmulate.mockResolvedValue(
       okEmulationResult({
         actions: [
-          { kind: "jetton_burn", status: "ok", simplePreview: "Burn", rawType: "JettonBurn" },
-          { kind: "nft_purchase", status: "ok", simplePreview: "Buy", rawType: "NftPurchase" },
-          { kind: "domain_renew", status: "ok", simplePreview: "Renew", rawType: "DomainRenew" },
+          {
+            kind: "jetton_burn",
+            status: "ok",
+            simplePreview: "Burn",
+            rawType: "JettonBurn",
+            details: null,
+          },
+          {
+            kind: "nft_purchase",
+            status: "ok",
+            simplePreview: "Buy",
+            rawType: "NftPurchase",
+            details: null,
+          },
+          {
+            kind: "domain_renew",
+            status: "ok",
+            simplePreview: "Renew",
+            rawType: "DomainRenew",
+            details: null,
+          },
         ],
       }),
     );
 
-    const result = await scanTransactionWithEmulation(enabledClient, buildInput(), {
-      staticActionCount: 3,
-      staticHasStateInit: false,
-    });
+    const result = await scanTransactionWithEmulation(
+      enabledClient,
+      buildInput(),
+      baseStaticContext,
+    );
 
     expect(result.actions.map((a) => a.kind)).toEqual(["send_jetton", "send_nft", "unknown"]);
   });
