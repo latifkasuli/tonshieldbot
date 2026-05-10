@@ -17,6 +17,7 @@
     "@tonshield/safe-fetch": "workspace:*",
     "@tonshield/shared": "workspace:*",
     "@tonshield/storage": "workspace:*",
+    "@tonshield/ton-emulator": "workspace:*",
     "@tonshield/ton-scanner": "workspace:*",
     "hono": "^4.12.18",
     "ioredis": "^5.10.0",

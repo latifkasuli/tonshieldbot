@@ -15,6 +15,7 @@
     "@tonshield/safe-fetch": "workspace:*",
     "@tonshield/shared": "workspace:*",
     "@tonshield/storage": "workspace:*",
+    "@tonshield/ton-emulator": "workspace:*",
     "@tonshield/ton-scanner": "workspace:*",
     "grammy": "^1.42.0",
     "ioredis": "^5.10.0",

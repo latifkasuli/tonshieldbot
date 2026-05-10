@@ -65,6 +65,9 @@ importers:
       '@tonshield/storage':
         specifier: workspace:*
         version: link:../../packages/storage
+      '@tonshield/ton-emulator':
+        specifier: workspace:*
+        version: link:../../packages/ton-emulator
       '@tonshield/ton-scanner':
         specifier: workspace:*
         version: link:../../packages/ton-scanner
@@ -98,6 +101,9 @@ importers:
       '@tonshield/storage':
         specifier: workspace:*
         version: link:../../packages/storage
+      '@tonshield/ton-emulator':
+        specifier: workspace:*
+        version: link:../../packages/ton-emulator
       '@tonshield/ton-scanner':
         specifier: workspace:*
         version: link:../../packages/ton-scanner
