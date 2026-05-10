@@ -77,8 +77,10 @@ const networkFromBaseUrl = (baseUrl: string): NetworkGlobalId =>
  *
  *   - `uninitialised` → `EMULATION_SENDER_UNINITIALISED` (info)
  *   - `unknown_wallet` → skip emulation, evidence carries `interfaces[]`
- *   - `fetch_failed` → either `EMULATION_FAILED` (4xx) or
- *     `EMULATION_PROVIDER_DOWN` (5xx / network)
+ *   - `fetch_failed` → classified by httpStatus in the scanner:
+ *       429 → `EMULATION_RATE_LIMITED`,
+ *       5xx / network (`null`) → `EMULATION_PROVIDER_DOWN`,
+ *       other 4xx → `EMULATION_FAILED`
  */
 export const fetchSenderMetadata = async (
   client: TonEmulatorClient,

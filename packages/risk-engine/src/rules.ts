@@ -214,6 +214,17 @@ export const coreRules = [
     defaultScoreDelta: 10,
   },
   {
+    id: "EMULATION_RATE_LIMITED",
+    category: "emulation",
+    severity: "info",
+    title: "Emulation rate-limited",
+    description:
+      "TONAPI returned 429. Emulation was not performed for this request, but the static decode is still authoritative.",
+    recommendation:
+      "Retry in a few seconds. If this persists, lower scan volume or upgrade the TONAPI tier.",
+    defaultScoreDelta: 5,
+  },
+  {
     id: "EMULATION_PROVIDER_DOWN",
     category: "emulation",
     severity: "low",

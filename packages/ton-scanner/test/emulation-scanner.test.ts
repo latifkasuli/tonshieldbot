@@ -172,7 +172,7 @@ describe("scanTransactionWithEmulation degradation paths", () => {
     expect(mockedEmulate).not.toHaveBeenCalled();
   });
 
-  it("silently skips when TONAPI metadata fetch fails (PR-D handles classification)", async () => {
+  it("classifies metadata-fetch 5xx as EMULATION_PROVIDER_DOWN and skips the emulate call", async () => {
     mockedFetchMetadata.mockResolvedValue({ status: "fetch_failed", httpStatus: 503 });
 
     const result = await scanTransactionWithEmulation(
@@ -181,8 +181,60 @@ describe("scanTransactionWithEmulation degradation paths", () => {
       baseStaticContext,
     );
 
-    expect(result.findings).toEqual([]);
+    expect(ruleIds(result.findings)).toEqual(["EMULATION_PROVIDER_DOWN"]);
+    expect(result.findings[0]?.evidence).toMatchObject({
+      source: "metadata_fetch",
+      httpStatus: 503,
+    });
     expect(mockedEmulate).not.toHaveBeenCalled();
+  });
+
+  it("classifies metadata-fetch 429 as EMULATION_RATE_LIMITED", async () => {
+    mockedFetchMetadata.mockResolvedValue({ status: "fetch_failed", httpStatus: 429 });
+
+    const result = await scanTransactionWithEmulation(
+      enabledClient,
+      buildInput(),
+      baseStaticContext,
+    );
+
+    expect(ruleIds(result.findings)).toEqual(["EMULATION_RATE_LIMITED"]);
+    expect(result.findings[0]?.evidence).toMatchObject({
+      source: "metadata_fetch",
+      httpStatus: 429,
+    });
+  });
+
+  it("classifies metadata-fetch 4xx (non-429) as EMULATION_FAILED", async () => {
+    mockedFetchMetadata.mockResolvedValue({ status: "fetch_failed", httpStatus: 401 });
+
+    const result = await scanTransactionWithEmulation(
+      enabledClient,
+      buildInput(),
+      baseStaticContext,
+    );
+
+    expect(ruleIds(result.findings)).toEqual(["EMULATION_FAILED"]);
+    expect(result.findings[0]?.evidence).toMatchObject({
+      source: "metadata_fetch",
+      httpStatus: 401,
+    });
+  });
+
+  it("classifies metadata-fetch network/timeout (httpStatus null) as EMULATION_PROVIDER_DOWN", async () => {
+    mockedFetchMetadata.mockResolvedValue({ status: "fetch_failed", httpStatus: null });
+
+    const result = await scanTransactionWithEmulation(
+      enabledClient,
+      buildInput(),
+      baseStaticContext,
+    );
+
+    expect(ruleIds(result.findings)).toEqual(["EMULATION_PROVIDER_DOWN"]);
+    expect(result.findings[0]?.evidence).toMatchObject({
+      source: "metadata_fetch",
+      httpStatus: null,
+    });
   });
 
   it("emits TRANSACTION_MALFORMED_MESSAGE when the request builder throws", async () => {
@@ -332,7 +384,7 @@ describe("scanTransactionWithEmulation degradation paths", () => {
     expect(result.findings[0]?.evidence).toMatchObject({ index: 1 });
   });
 
-  it("silently skips when the emulator call returns a failed status (PR-D classifies)", async () => {
+  it("classifies emulate-call 429 as EMULATION_RATE_LIMITED with reason in evidence", async () => {
     mockedFetchMetadata.mockResolvedValue(okMetadata());
     mockedEmulate.mockResolvedValue({ status: "failed", reason: "rate_limited", httpStatus: 429 });
 
@@ -342,8 +394,79 @@ describe("scanTransactionWithEmulation degradation paths", () => {
       baseStaticContext,
     );
 
-    expect(result.findings).toEqual([]);
+    expect(ruleIds(result.findings)).toEqual(["EMULATION_RATE_LIMITED"]);
+    expect(result.findings[0]?.evidence).toMatchObject({
+      source: "emulate_call",
+      reason: "rate_limited",
+      httpStatus: 429,
+    });
     expect(result.actions).toEqual([]);
+  });
+
+  it("classifies emulate-call 5xx as EMULATION_PROVIDER_DOWN", async () => {
+    mockedFetchMetadata.mockResolvedValue(okMetadata());
+    mockedEmulate.mockResolvedValue({
+      status: "failed",
+      reason: "provider_down",
+      httpStatus: 502,
+    });
+
+    const result = await scanTransactionWithEmulation(
+      enabledClient,
+      buildInput(),
+      baseStaticContext,
+    );
+
+    expect(ruleIds(result.findings)).toEqual(["EMULATION_PROVIDER_DOWN"]);
+    expect(result.findings[0]?.evidence).toMatchObject({
+      source: "emulate_call",
+      reason: "provider_down",
+      httpStatus: 502,
+    });
+  });
+
+  it("classifies emulate-call network/timeout (httpStatus null) as EMULATION_PROVIDER_DOWN", async () => {
+    mockedFetchMetadata.mockResolvedValue(okMetadata());
+    mockedEmulate.mockResolvedValue({
+      status: "failed",
+      reason: "provider_down",
+      httpStatus: null,
+    });
+
+    const result = await scanTransactionWithEmulation(
+      enabledClient,
+      buildInput(),
+      baseStaticContext,
+    );
+
+    expect(ruleIds(result.findings)).toEqual(["EMULATION_PROVIDER_DOWN"]);
+    expect(result.findings[0]?.evidence).toMatchObject({
+      source: "emulate_call",
+      reason: "provider_down",
+      httpStatus: null,
+    });
+  });
+
+  it("classifies emulate-call bad_request (non-429 4xx) as EMULATION_FAILED", async () => {
+    mockedFetchMetadata.mockResolvedValue(okMetadata());
+    mockedEmulate.mockResolvedValue({
+      status: "failed",
+      reason: "bad_request",
+      httpStatus: 422,
+    });
+
+    const result = await scanTransactionWithEmulation(
+      enabledClient,
+      buildInput(),
+      baseStaticContext,
+    );
+
+    expect(ruleIds(result.findings)).toEqual(["EMULATION_FAILED"]);
+    expect(result.findings[0]?.evidence).toMatchObject({
+      source: "emulate_call",
+      reason: "bad_request",
+      httpStatus: 422,
+    });
   });
 });
 
