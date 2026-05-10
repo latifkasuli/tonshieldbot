@@ -105,6 +105,22 @@ const gatherScanResult = async (input: ScanInput, deps: GatherDeps): Promise<Gat
     // §9.3.3. Static actions and emulated actions are kept side-by-side; the
     // bot/api UI is responsible for any de-duplication it wants to do.
     const staticResult = scanTransactionJson(input);
+
+    // The static decoder and the emulation scanner both validate
+    // `transaction.messages` structurally and both emit
+    // `TRANSACTION_MALFORMED_MESSAGE` when it's broken. If the static side
+    // already found malformed messages, we skip emulation — running it
+    // would double-emit the rule (and double the score) for what is one
+    // underlying defect. The static finding alone is sufficient and
+    // definitive; nothing emulation can do is more useful.
+    const staticFoundMalformed = staticResult.findings.some(
+      (finding) => finding.ruleId === "TRANSACTION_MALFORMED_MESSAGE",
+    );
+
+    if (staticFoundMalformed) {
+      return staticResult;
+    }
+
     const emulationResult = await scanTransactionWithEmulation(deps.emulator, input, {
       staticActionCount: staticResult.actions.length,
       staticHasStateInit: hasStateInit(input.transaction),

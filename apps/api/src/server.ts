@@ -137,14 +137,21 @@ export const createApiServer = (
       emulator: options.emulator,
       rawInput: body.data.input,
     });
-    const saved = await options.reports.save(fresh);
+    // `ReportStore.save()` is dedup-aware: on input-hash conflict it
+    // returns the existing row instead of writing the fresh one. For
+    // emulation results that's wrong — the previously-stored report can be
+    // stale (different seqno/balance/code) or carry a stuck
+    // `EMULATION_NOT_CONFIGURED` from before the key was set. When
+    // `cacheable === false`, we return the fresh report directly.
+    const saved = cacheable ? await options.reports.save(fresh) : fresh;
 
     c.var.log.info(
       {
         input_kind: saved.input.kind,
         verdict: saved.verdict,
         risk_score: saved.riskScore,
-        dedup_hit: saved.id !== fresh.id,
+        dedup_hit: cacheable && saved.id !== fresh.id,
+        persisted: cacheable,
       },
       "scan_resolved",
     );

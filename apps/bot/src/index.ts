@@ -65,13 +65,18 @@ bot.on("message:text", async (ctx) => {
       emulator: deps.emulator,
       rawInput,
     });
-    report = await deps.storage.reports.save(fresh);
+    // `ReportStore.save()` is dedup-aware and returns the existing row on
+    // input-hash conflict — symmetric with `findByInputHash` above. When
+    // not cacheable, return the fresh report directly. See
+    // `isScanResultCacheable` for the rationale.
+    report = cacheable ? await deps.storage.reports.save(fresh) : fresh;
     ctx.log.info(
       {
         input_kind: report.input.kind,
         verdict: report.verdict,
         risk_score: report.riskScore,
-        dedup_hit: report.id !== fresh.id,
+        dedup_hit: cacheable && report.id !== fresh.id,
+        persisted: cacheable,
       },
       "scan_resolved",
     );

@@ -1,8 +1,16 @@
 import type { ScanInput } from "@tonshield/shared";
 
 /**
- * Whether a scan result is safe to serve from the report cache (input-hash
- * dedup) instead of running a fresh scan.
+ * Whether a scan result is safe to participate in the input-hash-keyed
+ * report cache. This governs **both ends** of the cache lifecycle:
+ *
+ *   - `findByInputHash()` lookups (read side): when false, callers should
+ *     skip the cache and run a fresh scan.
+ *   - `ReportStore.save()` (write side): `save()` is dedup-aware — it
+ *     returns the existing row on input-hash conflict instead of writing.
+ *     When this returns false, callers must NOT call `save(fresh)`, or the
+ *     stale stored report will silently replace the fresh emulation result
+ *     they just produced. Return `fresh` directly instead.
  *
  * Most scan kinds produce a deterministic result that's a pure function of
  * the input — the same TON Connect link, address, or BOC will keep yielding
@@ -20,7 +28,7 @@ import type { ScanInput } from "@tonshield/shared";
  * before `TONAPI_KEY` was configured would persist `EMULATION_NOT_CONFIGURED`
  * in the cache forever, and enabling the key on the running deployment
  * wouldn't trigger a re-scan. With this rule, enabling the key invalidates
- * the cache for transaction-JSON inputs immediately.
+ * the cache for transaction-JSON inputs immediately on both sides.
  */
 export const isScanResultCacheable = (
   input: ScanInput,
