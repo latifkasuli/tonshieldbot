@@ -9,6 +9,7 @@
       "@tonshield/safe-fetch": ["./packages/safe-fetch/src/index.ts"],
       "@tonshield/shared": ["./packages/shared/src/index.ts"],
       "@tonshield/storage": ["./packages/storage/src/index.ts"],
+      "@tonshield/ton-emulator": ["./packages/ton-emulator/src/index.ts"],
       "@tonshield/ton-scanner": ["./packages/ton-scanner/src/index.ts"]
     }
   },
