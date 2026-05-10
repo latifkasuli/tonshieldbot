@@ -5,6 +5,8 @@ import { createInMemoryRateLimiter, createRedisRateLimiter } from "@tonshield/ra
 import type { RateLimiter } from "@tonshield/rate-limit";
 import { createStorage } from "@tonshield/storage";
 import type { Storage } from "@tonshield/storage";
+import { createTonEmulatorClient } from "@tonshield/ton-emulator";
+import type { TonEmulatorClient } from "@tonshield/ton-emulator";
 import type { BotConfig } from "./config.ts";
 
 export interface BotDependencies {
@@ -12,6 +14,7 @@ export interface BotDependencies {
   readonly storage: Storage;
   readonly rateLimiter: RateLimiter;
   readonly redis: Redis | null;
+  readonly emulator: TonEmulatorClient;
   readonly close: () => Promise<void>;
 }
 
@@ -38,11 +41,19 @@ export const createBotDependencies = (config: BotConfig): BotDependencies => {
     "storage_initialized",
   );
 
+  const emulator = createTonEmulatorClient({
+    apiKey: config.tonApiKey ?? null,
+    baseUrl: config.tonApiBaseUrl ?? "https://tonapi.io",
+  });
+
+  logger.info({ enabled: emulator.enabled, baseUrl: emulator.baseUrl }, "emulator_initialized");
+
   return {
     logger,
     storage,
     rateLimiter,
     redis,
+    emulator,
     close: async () => {
       await storage.close();
       if (redis !== null) {

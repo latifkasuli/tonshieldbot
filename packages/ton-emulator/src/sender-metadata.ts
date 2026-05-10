@@ -4,8 +4,17 @@ import type { TonEmulatorClient } from "./client.ts";
 import { networkGlobalIds, type NetworkGlobalId } from "./request-builder.ts";
 import type { WalletVersion } from "./types.ts";
 
+/**
+ * Narrowed wallet version used by `SenderMetadata`. The full `WalletVersion`
+ * enum includes `"unknown"`, but a successful `fetchSenderMetadata` result
+ * always has a recognised version (the `unknown_wallet` branch returns a
+ * different status). Encoding that invariant in the type lets the request
+ * builder accept the value without a runtime check.
+ */
+export type SupportedWalletVersion = Exclude<WalletVersion, "unknown">;
+
 export interface SenderMetadata {
-  readonly walletVersion: WalletVersion;
+  readonly walletVersion: SupportedWalletVersion;
   readonly publicKey: Buffer;
   readonly seqno: number;
   readonly networkGlobalId: NetworkGlobalId;

@@ -54,7 +54,11 @@ bot.on("message:text", async (ctx) => {
     );
     report = cached;
   } else {
-    const fresh = await createBasicScan({ cache: manifestCache, rawInput });
+    const fresh = await createBasicScan({
+      cache: manifestCache,
+      emulator: deps.emulator,
+      rawInput,
+    });
     report = await deps.storage.reports.save(fresh);
     ctx.log.info(
       {

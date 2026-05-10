@@ -27,4 +27,6 @@ export { parseMessages } from "./transaction/message-parser.ts";
 export type { ParseMessagesResult } from "./transaction/message-parser.ts";
 export { scanTransactionJson } from "./transaction/scanner.ts";
 export type { TransactionScanResult } from "./transaction/scanner.ts";
+export { scanTransactionWithEmulation } from "./transaction/emulation-scanner.ts";
+export type { EmulationScanResult } from "./transaction/emulation-scanner.ts";
 export type { DecodedPayload, ParsedMessage } from "./transaction/types.ts";

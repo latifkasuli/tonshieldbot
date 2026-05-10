@@ -264,6 +264,9 @@ importers:
       '@tonshield/shared':
         specifier: workspace:*
         version: link:../shared
+      '@tonshield/ton-emulator':
+        specifier: workspace:*
+        version: link:../ton-emulator
       tldts:
         specifier: ^7.0.30
         version: 7.0.30

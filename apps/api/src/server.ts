@@ -9,6 +9,7 @@ import { createHonoRateLimit, defaultTierLimits } from "@tonshield/rate-limit";
 import type { RateLimiter } from "@tonshield/rate-limit";
 import { TtlFetchCache } from "@tonshield/safe-fetch";
 import { canonicalInputHash, type ApiKeyStore, type ReportStore } from "@tonshield/storage";
+import type { TonEmulatorClient } from "@tonshield/ton-emulator";
 import { classifyInput, createBasicScan } from "@tonshield/ton-scanner";
 
 const scanRequestSchema = z.object({
@@ -28,6 +29,12 @@ export interface CreateApiServerOptions {
   readonly apiKeys: ApiKeyStore;
   readonly reports: ReportStore;
   readonly rateLimiter: RateLimiter;
+  /**
+   * TONAPI client for M2 emulation. The scanner branches on `client.enabled`
+   * internally, so we always pass it through; an unconfigured deployment
+   * still surfaces `EMULATION_NOT_CONFIGURED` so the omission is visible.
+   */
+  readonly emulator: TonEmulatorClient;
 }
 
 /**
@@ -121,6 +128,7 @@ export const createApiServer = (
 
     const fresh = await createBasicScan({
       cache: manifestCache,
+      emulator: options.emulator,
       rawInput: body.data.input,
     });
     const saved = await options.reports.save(fresh);
