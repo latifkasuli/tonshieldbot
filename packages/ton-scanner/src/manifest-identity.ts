@@ -15,9 +15,9 @@ interface ImpersonationCandidate {
  * those can differ, and a self-consistent manifest hosted at the redirect target
  * would otherwise bypass the origin-mismatch check.
  *
- * The TON Connect spec describes a recommended placement (`/<root>/tonconnect-
- * manifest.json` on the app's origin), but the SDK explicitly permits hosting on
- * any host — see https://github.com/ton-connect/sdk/issues/82. So exact-origin
+ * The TON Connect spec recommends placing the manifest at the app's origin, but
+ * SDK maintainers have stated manifest hosting can be external, including CDN
+ * hosting: https://github.com/ton-connect/sdk/issues/12. So exact-origin
  * equality is not a protocol invariant; the policy below balances that against
  * the security need to catch attacker redirects.
  *
