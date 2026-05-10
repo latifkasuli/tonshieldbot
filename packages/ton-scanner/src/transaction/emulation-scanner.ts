@@ -25,18 +25,23 @@ const EMPTY_RESULT: EmulationScanResult = { findings: [], actions: [] };
  * `/v2/wallet/emulate` and converting the response to TON Shield findings
  * and action previews.
  *
- * Per PR-C scope, this handles the common degradation paths:
+ * Degradation paths surfaced as findings:
  *   - emulator absent or `enabled === false` → `EMULATION_NOT_CONFIGURED`
  *   - transaction has no `from` field → `EMULATION_SKIPPED_NO_SENDER`
  *   - sender exists but is uninitialised on-chain → `EMULATION_SENDER_UNINITIALISED`
  *   - request builder throws on a malformed message field →
  *     `TRANSACTION_MALFORMED_MESSAGE` (reusing the M1.5 rule, with the
  *     thrown error in evidence)
+ *   - TONAPI 429 (rate-limited) → `EMULATION_RATE_LIMITED`
+ *   - TONAPI 5xx, timeout, or network failure → `EMULATION_PROVIDER_DOWN`
+ *   - TONAPI 4xx (other than 429) → `EMULATION_FAILED`
  *
- * Provider failures (TONAPI 4xx/5xx, network errors) and trace-emulate
- * fallback for non-wallet senders are PR-D scope. PR-C silently falls back
- * to static-only when those happen — `EmulationResult.status === "failed"`
- * is not surfaced as a finding here.
+ * All provider-failure findings are low/info severity so the static decode
+ * remains the authoritative signal and users don't see scary risk scores
+ * just because TONAPI hiccupped.
+ *
+ * Trace-emulate fallback for non-wallet senders is PR-D2/D3 scope; unknown
+ * wallet contracts still degrade silently to static-only here.
  *
  * The static `scanTransactionJson` runs FIRST in `gatherScanResult`; this
  * scanner only adds to its results — we never replace the static decode.
@@ -88,9 +93,12 @@ export const scanTransactionWithEmulation = async (
   }
 
   if (metadataResult.status === "fetch_failed") {
-    // PR-D will distinguish 4xx vs 5xx and emit EMULATION_FAILED /
-    // EMULATION_PROVIDER_DOWN. PR-C degrades quietly.
-    return EMPTY_RESULT;
+    return single(
+      providerFailureFinding({
+        source: "metadata_fetch",
+        httpStatus: metadataResult.httpStatus,
+      }),
+    );
   }
 
   const messagesResult = parseTonConnectMessages(input.transaction);
@@ -154,9 +162,13 @@ export const scanTransactionWithEmulation = async (
   }
 
   if (result.status === "failed") {
-    // PR-D: classify by `result.reason` and emit EMULATION_FAILED or
-    // EMULATION_PROVIDER_DOWN. PR-C degrades quietly to static-only.
-    return EMPTY_RESULT;
+    return single(
+      providerFailureFinding({
+        source: "emulate_call",
+        reason: result.reason,
+        httpStatus: result.httpStatus,
+      }),
+    );
   }
 
   return mapOkResult(result, senderResult.address, staticContext, metadataResult.metadata);
@@ -572,3 +584,73 @@ const emulationFinding = (
     evidence,
     rule: getCoreRule(ruleId),
   });
+
+/**
+ * Classifies a TONAPI provider failure (either a metadata fetch or the
+ * emulation call itself) into one of three degradation rules:
+ *
+ *   - HTTP 429 → `EMULATION_RATE_LIMITED` (info; transient, user can retry)
+ *   - HTTP 5xx, timeout, or network error (`httpStatus === null`) →
+ *     `EMULATION_PROVIDER_DOWN` (low; provider outage, not the user's fault)
+ *   - Any other 4xx → `EMULATION_FAILED` (low; likely a request-shape issue)
+ *
+ * Evidence carries enough breadcrumbs to debug without leaking secrets:
+ *   - `source`: which step failed (`metadata_fetch` | `emulate_call`)
+ *   - `httpStatus`: the HTTP code (or `null` for timeout / no-response)
+ *   - `reason` (emulate_call only): the SDK-error classification before
+ *     mapping to a rule — useful when `httpStatus` is null and we have to
+ *     distinguish a network error from a malformed SDK response.
+ */
+const providerFailureFinding = (input: {
+  readonly source: "metadata_fetch" | "emulate_call";
+  readonly httpStatus: number | null;
+  readonly reason?: "rate_limited" | "provider_down" | "bad_request" | "unknown";
+}): RiskFinding => {
+  const ruleId = classifyProviderFailure(input.httpStatus, input.reason);
+  const evidence: Record<string, unknown> = {
+    source: input.source,
+    httpStatus: input.httpStatus,
+  };
+
+  if (input.reason !== undefined) {
+    evidence.reason = input.reason;
+  }
+
+  return createFinding({
+    confidence: "low",
+    evidence,
+    rule: getCoreRule(ruleId),
+  });
+};
+
+const classifyProviderFailure = (
+  httpStatus: number | null,
+  reason: "rate_limited" | "provider_down" | "bad_request" | "unknown" | undefined,
+): "EMULATION_RATE_LIMITED" | "EMULATION_PROVIDER_DOWN" | "EMULATION_FAILED" => {
+  // Prefer the emulator's pre-classified `reason` when present — it's derived
+  // from the same status code but encodes the SDK-error context too (a
+  // timeout, for instance, has no HTTP status and is harder to tell apart
+  // from a malformed-response error without it).
+  if (reason === "rate_limited") {
+    return "EMULATION_RATE_LIMITED";
+  }
+
+  if (reason === "provider_down") {
+    return "EMULATION_PROVIDER_DOWN";
+  }
+
+  if (reason === "bad_request") {
+    return "EMULATION_FAILED";
+  }
+
+  // Otherwise classify by HTTP status alone (the metadata-fetch path).
+  if (httpStatus === 429) {
+    return "EMULATION_RATE_LIMITED";
+  }
+
+  if (httpStatus === null || httpStatus >= 500) {
+    return "EMULATION_PROVIDER_DOWN";
+  }
+
+  return "EMULATION_FAILED";
+};
