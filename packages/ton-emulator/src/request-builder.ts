@@ -2,6 +2,7 @@ import {
   Address,
   beginCell,
   Cell,
+  type ExtraCurrency,
   external,
   internal,
   loadStateInit,
@@ -21,7 +22,15 @@ import type { WalletVersion } from "./types.ts";
  * their parsed JSON without reshaping.
  */
 export interface TonConnectMessage {
-  /** Destination contract / wallet address (base64 friendly or raw form). */
+  /**
+   * Destination address in user-friendly format (`EQ...` or `UQ...`).
+   *
+   * The TON Connect spec requires user-friendly format because the wallet
+   * derives the message's bounce flag from the address encoding (`EQ` =
+   * bounceable, `UQ` = non-bounceable). Raw `0:...` addresses lack this and
+   * are rejected — passing one would silently force a hardcoded default that
+   * diverges from what a real wallet would send.
+   */
   readonly address: string;
   /** Nanoton amount as an unsigned integer string. */
   readonly amount: string;
@@ -29,6 +38,17 @@ export interface TonConnectMessage {
   readonly payload?: string;
   /** Optional base64 BOC for the contract's `StateInit` (deployments). */
   readonly stateInit?: string;
+  /**
+   * Optional extra currencies sent alongside `amount`. Map of extra-currency
+   * ID (uint32, encoded as a numeric string for JSON-friendliness) to the
+   * amount in that currency's smallest unit (encoded as a string).
+   *
+   * TON dApps use this to transfer non-TON, non-Jetton native assets via the
+   * TON Extra Currency mechanism. Omitting it from emulation requests would
+   * make the emulated outcome understate outgoing assets vs. what the wallet
+   * would actually send.
+   */
+  readonly extraCurrency?: Readonly<Record<string, string>>;
 }
 
 /** TON network global ID. Mainnet = -239, testnet = -3. */
@@ -109,14 +129,97 @@ export const buildExternalMessageBoc = async (
 const toInternalMessage = (message: TonConnectMessage): MessageRelaxed => {
   const init = parseStateInit(message.stateInit);
   const body = parseBody(message.payload);
+  const { address, bounce } = parseDestination(message.address);
+  const value = BigInt(message.amount);
+  const extracurrency = parseExtraCurrency(message.extraCurrency);
 
   return internal({
-    to: Address.parse(message.address),
-    value: BigInt(message.amount),
-    bounce: true,
+    to: address,
+    value,
+    bounce,
     body,
     init,
+    extracurrency,
   });
+};
+
+/**
+ * Parses a TON Connect destination address and extracts its bounce flag.
+ *
+ * TON Connect requires user-friendly format (`EQ...` bounceable, `UQ...`
+ * non-bounceable) because the wallet derives the message's bounce flag from
+ * the address encoding. Raw `0:...` addresses carry no bounce information,
+ * so accepting them would mean picking a hardcoded default — at which point
+ * our emulation would produce a different on-chain outcome than the real
+ * wallet for any UQ-shaped destination. We reject raw form rather than
+ * silently misrepresent the message.
+ */
+const parseDestination = (raw: string): { address: Address; bounce: boolean } => {
+  try {
+    const parsed = Address.parseFriendly(raw);
+
+    return { address: parsed.address, bounce: parsed.isBounceable };
+  } catch {
+    throw new Error(
+      `TON Connect message destination must be a user-friendly address ` +
+        `(EQ.../UQ...) so the bounce flag can be derived from the encoding; ` +
+        `received "${raw}"`,
+    );
+  }
+};
+
+/**
+ * Converts the TON Connect `extraCurrency` map (string→string for JSON
+ * portability) into the `ExtraCurrency` shape `internal()` accepts
+ * (`{ [k: number]: bigint }`).
+ *
+ * Returns `undefined` when no extras are present so `internal()` can short-
+ * circuit and not even allocate the dictionary cell. Invalid IDs (non-
+ * integers, negative, > 2^32-1) and invalid amounts (non-digit strings,
+ * negative) throw — PR-C maps the throw onto a malformed-message finding
+ * rather than letting it crash the scan.
+ */
+const parseExtraCurrency = (
+  extraCurrency: Readonly<Record<string, string>> | undefined,
+): ExtraCurrency | undefined => {
+  if (extraCurrency === undefined) {
+    return undefined;
+  }
+
+  const entries = Object.entries(extraCurrency);
+
+  if (entries.length === 0) {
+    return undefined;
+  }
+
+  const result: Record<number, bigint> = {};
+
+  for (const [rawId, rawAmount] of entries) {
+    const id = parseUint32(rawId);
+    const value = BigInt(rawAmount);
+
+    if (value < 0n) {
+      throw new Error(`extraCurrency amount for id ${String(id)} is negative: ${rawAmount}`);
+    }
+
+    result[id] = value;
+  }
+
+  return result;
+};
+
+const parseUint32 = (raw: string): number => {
+  if (!/^\d+$/.test(raw)) {
+    throw new Error(`extraCurrency id must be a non-negative integer string; got "${raw}"`);
+  }
+
+  const value = Number(raw);
+
+  if (!Number.isSafeInteger(value) || value < 0 || value > 0xff_ff_ff_ff) {
+    throw new Error(`extraCurrency id ${raw} is outside the uint32 range`);
+  }
+
+  return value;
 };
 
 const parseStateInit = (raw: string | undefined): StateInit | undefined => {

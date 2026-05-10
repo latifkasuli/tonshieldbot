@@ -191,6 +191,26 @@ describe("buildExternalMessageBoc", () => {
     ).rejects.toThrow();
   });
 
+  it("rejects raw-form destination addresses (TON Connect requires friendly form)", async () => {
+    // Per the spec, TON Connect destinations must be user-friendly (EQ/UQ) so
+    // the wallet can derive the bounce flag from the encoding. Accepting raw
+    // form would force us to pick a hardcoded bounce value, which would make
+    // emulation diverge from the real wallet's behaviour for non-bounceable
+    // destinations.
+    await expect(
+      buildExternalMessageBoc(
+        baseInput({
+          messages: [
+            {
+              address: "0:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+              amount: "100",
+            },
+          ],
+        }),
+      ),
+    ).rejects.toThrow(/user-friendly address/);
+  });
+
   it("generates a fresh dummy secret when no override is passed", async () => {
     // Without `dummySecretKeyOverride`, two builds should produce different
     // BOCs because the embedded signature differs. (Wallet body includes the
@@ -202,5 +222,134 @@ describe("buildExternalMessageBoc", () => {
     const b = await buildExternalMessageBoc(input);
 
     expect(a).not.toBe(b);
+  });
+
+  // ── bounce flag derivation (regression: builder used to hardcode true) ──
+
+  it("derives bounce=true from an EQ-prefixed destination address", async () => {
+    const eqForm = RECIPIENT_ADDRESS.toString({ bounceable: true, urlSafe: true });
+    expect(eqForm.startsWith("EQ")).toBe(true);
+
+    const boc = await buildExternalMessageBoc(
+      baseInput({ messages: [{ address: eqForm, amount: "100000000" }] }),
+    );
+
+    expect(() => decodeExternalMessage(boc)).not.toThrow();
+  });
+
+  it("derives bounce=false from a UQ-prefixed destination address", async () => {
+    const uqForm = RECIPIENT_ADDRESS.toString({ bounceable: false, urlSafe: true });
+    expect(uqForm.startsWith("UQ")).toBe(true);
+
+    const boc = await buildExternalMessageBoc(
+      baseInput({ messages: [{ address: uqForm, amount: "100000000" }] }),
+    );
+
+    expect(() => decodeExternalMessage(boc)).not.toThrow();
+  });
+
+  it("EQ and UQ destinations produce different BOCs (bounce flag is wired through)", async () => {
+    // Bounceable and non-bounceable copies of the same address must round-trip
+    // through the wallet transfer with different `bounce` bits, producing
+    // different external-message bytes. If they were identical, our builder
+    // would be silently ignoring the friendly-form bounce flag — the exact
+    // bug PR #16 review caught.
+    const eqForm = RECIPIENT_ADDRESS.toString({ bounceable: true, urlSafe: true });
+    const uqForm = RECIPIENT_ADDRESS.toString({ bounceable: false, urlSafe: true });
+
+    const eqBoc = await buildExternalMessageBoc(
+      baseInput({ messages: [{ address: eqForm, amount: "100000000" }] }),
+    );
+    const uqBoc = await buildExternalMessageBoc(
+      baseInput({ messages: [{ address: uqForm, amount: "100000000" }] }),
+    );
+
+    expect(eqBoc).not.toBe(uqBoc);
+  });
+
+  // ── extra-currency support ──
+
+  it("accepts an empty extraCurrency map as equivalent to omitted", async () => {
+    const withEmpty = await buildExternalMessageBoc(
+      baseInput({
+        messages: [
+          {
+            address: RECIPIENT_ADDRESS.toString(),
+            amount: "100000000",
+            extraCurrency: {},
+          },
+        ],
+      }),
+    );
+    const withoutField = await buildExternalMessageBoc(baseInput());
+
+    expect(withEmpty).toBe(withoutField);
+  });
+
+  it("includes extra currencies in the BOC", async () => {
+    const withExtra = await buildExternalMessageBoc(
+      baseInput({
+        messages: [
+          {
+            address: RECIPIENT_ADDRESS.toString(),
+            amount: "100000000",
+            extraCurrency: { "100": "1000", "239": "9876543210" },
+          },
+        ],
+      }),
+    );
+    const withoutExtra = await buildExternalMessageBoc(baseInput());
+
+    expect(withExtra).not.toBe(withoutExtra);
+    expect(() => decodeExternalMessage(withExtra)).not.toThrow();
+  });
+
+  it("rejects non-numeric extraCurrency IDs", async () => {
+    await expect(
+      buildExternalMessageBoc(
+        baseInput({
+          messages: [
+            {
+              address: RECIPIENT_ADDRESS.toString(),
+              amount: "100",
+              extraCurrency: { "not-a-number": "1000" },
+            },
+          ],
+        }),
+      ),
+    ).rejects.toThrow(/extraCurrency id/);
+  });
+
+  it("rejects extraCurrency IDs outside the uint32 range", async () => {
+    await expect(
+      buildExternalMessageBoc(
+        baseInput({
+          messages: [
+            {
+              address: RECIPIENT_ADDRESS.toString(),
+              amount: "100",
+              // 2^32 = 4294967296, one above uint32 max
+              extraCurrency: { "4294967296": "1000" },
+            },
+          ],
+        }),
+      ),
+    ).rejects.toThrow(/uint32 range/);
+  });
+
+  it("rejects negative extraCurrency amounts", async () => {
+    await expect(
+      buildExternalMessageBoc(
+        baseInput({
+          messages: [
+            {
+              address: RECIPIENT_ADDRESS.toString(),
+              amount: "100",
+              extraCurrency: { "100": "-500" },
+            },
+          ],
+        }),
+      ),
+    ).rejects.toThrow(/negative/);
   });
 });
