@@ -223,6 +223,27 @@ importers:
         specifier: ^4.21.0
         version: 4.21.0
 
+  packages/ton-emulator:
+    dependencies:
+      '@ton-api/client':
+        specifier: ^0.4.0
+        version: 0.4.0(@ton/core@0.63.1(@ton/crypto@3.3.0))
+      '@ton/core':
+        specifier: ^0.63.1
+        version: 0.63.1(@ton/crypto@3.3.0)
+      '@ton/crypto':
+        specifier: ^3.3.0
+        version: 3.3.0
+      '@ton/ton':
+        specifier: ^16.2.4
+        version: 16.2.4(@ton/core@0.63.1(@ton/crypto@3.3.0))(@ton/crypto@3.3.0)
+      '@tonshield/shared':
+        specifier: workspace:*
+        version: link:../shared
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
+
   packages/ton-scanner:
     dependencies:
       '@ton-api/client':
