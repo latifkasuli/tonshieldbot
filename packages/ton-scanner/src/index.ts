@@ -29,5 +29,7 @@ export { scanTransactionJson } from "./transaction/scanner.ts";
 export type { TransactionScanResult } from "./transaction/scanner.ts";
 export { scanTransactionWithEmulation } from "./transaction/emulation-scanner.ts";
 export type { EmulationScanResult } from "./transaction/emulation-scanner.ts";
+export { scanBocWithEmulation } from "./boc/scanner.ts";
+export type { BocScanResult } from "./boc/scanner.ts";
 export { isScanResultCacheable } from "./cacheability.ts";
 export type { DecodedPayload, ParsedMessage } from "./transaction/types.ts";

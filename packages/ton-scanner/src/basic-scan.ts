@@ -10,6 +10,7 @@ import {
 import type { ActionPreview, RiskFinding, ScanInput, ScanReport } from "@tonshield/shared";
 import type { FetchCache } from "@tonshield/safe-fetch";
 import type { TonEmulatorClient } from "@tonshield/ton-emulator";
+import { scanBocWithEmulation } from "./boc/scanner.ts";
 import { classifyInput } from "./classify-input.ts";
 import { scanTonConnectManifest } from "./manifest-scanner.ts";
 import { scanTransactionJson } from "./transaction/scanner.ts";
@@ -132,6 +133,17 @@ const gatherScanResult = async (input: ScanInput, deps: GatherDeps): Promise<Gat
     };
   }
 
+  if (input.kind === "boc") {
+    // Raw BOC inputs have no M1.5 static decode counterpart (M1.5 operates
+    // on TON Connect transaction JSON, not raw cells). Emulation via
+    // `/v2/events/emulate` is the only signal source here. When the
+    // emulator is disabled, `scanBocWithEmulation` itself surfaces
+    // `EMULATION_NOT_CONFIGURED` so the absence stays visible.
+    const bocResult = await scanBocWithEmulation(deps.emulator, input);
+
+    return { findings: bocResult.findings, actions: bocResult.actions };
+  }
+
   return { findings: [], actions: [] };
 };
 
@@ -143,6 +155,12 @@ const summarizeInput = (input: ScanInput, findings: readonly RiskFinding[]): str
   if (input.kind === "transaction_json") {
     if (findings.length === 0) {
       return "Transaction JSON scanned. No risk signals detected.";
+    }
+  }
+
+  if (input.kind === "boc") {
+    if (findings.length === 0) {
+      return "Raw BOC scanned. No risk signals detected.";
     }
   }
 
