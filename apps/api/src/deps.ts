@@ -5,6 +5,8 @@ import { createInMemoryRateLimiter, createRedisRateLimiter } from "@tonshield/ra
 import type { RateLimiter } from "@tonshield/rate-limit";
 import { createStorage } from "@tonshield/storage";
 import type { Storage } from "@tonshield/storage";
+import { createTelegramIntelClient } from "@tonshield/telegram-intel";
+import type { TelegramIntelClient } from "@tonshield/telegram-intel";
 import { createTonEmulatorClient } from "@tonshield/ton-emulator";
 import type { TonEmulatorClient } from "@tonshield/ton-emulator";
 import type { ApiConfig } from "./env.ts";
@@ -20,6 +22,13 @@ export interface ApiDependencies {
    * `EMULATION_NOT_CONFIGURED` instead of trying any HTTP calls.
    */
   readonly emulator: TonEmulatorClient;
+  /**
+   * Telegram Bot API client for M3 intelligence. Always present — when no
+   * `TELEGRAM_INTEL_BOT_TOKEN` was set, `client.enabled` is false and
+   * Telegram scanners emit `TELEGRAM_BOT_API_NOT_CONFIGURED` instead of
+   * attempting any Bot API calls.
+   */
+  readonly telegramIntel: TelegramIntelClient;
   readonly close: () => Promise<void>;
 }
 
@@ -61,12 +70,23 @@ export const createApiDependencies = (config: ApiConfig): ApiDependencies => {
 
   logger.info({ enabled: emulator.enabled, baseUrl: emulator.baseUrl }, "emulator_initialized");
 
+  const telegramIntel = createTelegramIntelClient({
+    token: config.telegramIntelBotToken ?? null,
+    apiBaseUrl: config.telegramApiBaseUrl ?? "https://api.telegram.org",
+  });
+
+  logger.info(
+    { enabled: telegramIntel.enabled, baseUrl: telegramIntel.apiBaseUrl },
+    "telegram_intel_initialized",
+  );
+
   return {
     logger,
     storage,
     rateLimiter,
     redis,
     emulator,
+    telegramIntel,
     close: async () => {
       await storage.close();
       if (redis !== null) {

@@ -20,6 +20,16 @@ const envSchema = z.object({
   // Override the TONAPI base URL — typically only set on testnet
   // deployments (`https://testnet.tonapi.io`). Defaults to mainnet.
   TONAPI_BASE_URL: z.string().optional(),
+  // When set, Telegram-side scans (M3 / spec §11) get live Bot API
+  // enrichment. This is intentionally separate from apps/bot's BOT_TOKEN
+  // so the scanner identity and operational budget are isolated. Unset →
+  // static-only Telegram scanning plus a
+  // `TELEGRAM_BOT_API_NOT_CONFIGURED` finding so the omission is visible.
+  TELEGRAM_INTEL_BOT_TOKEN: z.string().optional(),
+  // Override the Telegram Bot API base URL. Typically only set when
+  // self-hosting a local Bot API server per
+  // <https://core.telegram.org/bots/api#using-a-local-bot-api-server>.
+  TELEGRAM_API_BASE_URL: z.string().optional(),
 });
 
 export interface ApiConfig {
@@ -29,6 +39,8 @@ export interface ApiConfig {
   readonly redisUrl: string | undefined;
   readonly tonApiKey: string | undefined;
   readonly tonApiBaseUrl: string | undefined;
+  readonly telegramIntelBotToken: string | undefined;
+  readonly telegramApiBaseUrl: string | undefined;
 }
 
 const DEFAULT_PORT = 3000;
@@ -43,5 +55,7 @@ export const loadApiConfig = (env: NodeJS.ProcessEnv = process.env): ApiConfig =
     redisUrl: parsed.REDIS_URL,
     tonApiKey: parsed.TONAPI_KEY,
     tonApiBaseUrl: parsed.TONAPI_BASE_URL,
+    telegramIntelBotToken: parsed.TELEGRAM_INTEL_BOT_TOKEN,
+    telegramApiBaseUrl: parsed.TELEGRAM_API_BASE_URL,
   };
 };
