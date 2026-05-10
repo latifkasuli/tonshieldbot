@@ -171,14 +171,28 @@ describe("buildExternalMessageBoc", () => {
     expect(() => decodeExternalMessage(boc)).not.toThrow();
   });
 
-  it("rejects malformed amount strings via BigInt", async () => {
+  // ── strict decimal-amount validation (regression: BigInt() silently
+  //    accepts hex, empty, whitespace, signed strings — all of which are
+  //    invalid TON Connect amounts and would have been silently coerced) ──
+
+  it.each([
+    ["empty string", ""],
+    ["hex prefix", "0x10"],
+    ["leading whitespace", " 1000"],
+    ["trailing whitespace", "1000 "],
+    ["leading plus", "+5"],
+    ["leading minus", "-1"],
+    ["decimal point", "1.0"],
+    ["scientific notation", "1e9"],
+    ["pure letters", "not-a-number"],
+  ])("rejects %s as amount (%j)", async (_label, badAmount) => {
     await expect(
       buildExternalMessageBoc(
         baseInput({
-          messages: [{ address: RECIPIENT_ADDRESS.toString(), amount: "not-a-number" }],
+          messages: [{ address: RECIPIENT_ADDRESS.toString(), amount: badAmount }],
         }),
       ),
-    ).rejects.toThrow();
+    ).rejects.toThrow(/unsigned decimal integer string/);
   });
 
   it("rejects malformed destination addresses", async () => {
@@ -337,7 +351,15 @@ describe("buildExternalMessageBoc", () => {
     ).rejects.toThrow(/uint32 range/);
   });
 
-  it("rejects negative extraCurrency amounts", async () => {
+  // extraCurrency amounts go through the same strict validator as `amount`,
+  // so the same set of malformed inputs is rejected for both fields.
+  it.each([
+    ["empty string", ""],
+    ["hex prefix", "0x10"],
+    ["leading whitespace", " 1000"],
+    ["leading minus", "-1"],
+    ["decimal point", "1.5"],
+  ])("rejects %s as extraCurrency amount (%j)", async (_label, badAmount) => {
     await expect(
       buildExternalMessageBoc(
         baseInput({
@@ -345,11 +367,11 @@ describe("buildExternalMessageBoc", () => {
             {
               address: RECIPIENT_ADDRESS.toString(),
               amount: "100",
-              extraCurrency: { "100": "-500" },
+              extraCurrency: { "100": badAmount },
             },
           ],
         }),
       ),
-    ).rejects.toThrow(/negative/);
+    ).rejects.toThrow(/unsigned decimal integer string/);
   });
 });

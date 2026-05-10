@@ -130,7 +130,7 @@ const toInternalMessage = (message: TonConnectMessage): MessageRelaxed => {
   const init = parseStateInit(message.stateInit);
   const body = parseBody(message.payload);
   const { address, bounce } = parseDestination(message.address);
-  const value = BigInt(message.amount);
+  const value = parseAmountString(message.amount, "amount");
   const extracurrency = parseExtraCurrency(message.extraCurrency);
 
   return internal({
@@ -141,6 +141,39 @@ const toInternalMessage = (message: TonConnectMessage): MessageRelaxed => {
     init,
     extracurrency,
   });
+};
+
+/**
+ * Parses a TON Connect amount string into a `bigint`, rejecting anything that
+ * is not an unsigned decimal integer.
+ *
+ * Why we don't just call `BigInt()`: the JS `BigInt` constructor is far more
+ * permissive than the TON Connect amount format. Without this guard:
+ *   - `""`            → `0n` (silently accepts empty string)
+ *   - `"0x10"`        → `16n` (silently parses hex)
+ *   - `"  1000  "`    → `1000n` (silently strips whitespace)
+ *   - `"+5"`          → `5n` (silently accepts unary plus)
+ * For our scanner those would each be a different real-world bug shape that
+ * we want surfaced as a malformed-message error, not silently coerced. The
+ * same regex is what M1.5's static decoder uses (see
+ * `packages/ton-scanner/src/transaction/message-parser.ts:parseUnsignedIntString`)
+ * — keeping it consistent across the two scanners means the static and
+ * emulated paths reject the same set of inputs.
+ *
+ * @param fieldLabel Human-readable label for the field this value belongs to
+ *   (e.g. `"amount"`, `"extraCurrency amount for id 100"`), used in the
+ *   thrown error message so PR-C can surface it as evidence on the
+ *   malformed-message finding.
+ */
+const parseAmountString = (raw: string, fieldLabel: string): bigint => {
+  if (!/^\d+$/.test(raw)) {
+    throw new Error(
+      `${fieldLabel} must be an unsigned decimal integer string ` +
+        `(no hex, whitespace, sign, or empty); received "${raw}"`,
+    );
+  }
+
+  return BigInt(raw);
 };
 
 /**
@@ -196,13 +229,9 @@ const parseExtraCurrency = (
 
   for (const [rawId, rawAmount] of entries) {
     const id = parseUint32(rawId);
-    const value = BigInt(rawAmount);
-
-    if (value < 0n) {
-      throw new Error(`extraCurrency amount for id ${String(id)} is negative: ${rawAmount}`);
-    }
-
-    result[id] = value;
+    // Reuse the same strict decimal parser as `amount` so both fields reject
+    // identical malformed inputs (empty / hex / whitespace / signed).
+    result[id] = parseAmountString(rawAmount, `extraCurrency amount for id ${String(id)}`);
   }
 
   return result;
