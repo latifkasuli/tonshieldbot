@@ -243,6 +243,9 @@ importers:
       grammy:
         specifier: ^1.42.0
         version: 1.42.0
+      unicode-confusables:
+        specifier: ^0.1.1
+        version: 0.1.1
       zod:
         specifier: ^4.4.3
         version: 4.4.3
@@ -2059,6 +2062,9 @@ packages:
     resolution: {integrity: sha512-Z+4Hx9GE26Lh9Upwfnc8C7SsrpBPGaM/Gm6kMFtiG7c+5IvQKlXi/t+9x9DrrCh29cww5TSP9YdVaBcnLDs5fQ==}
     engines: {node: '>=22.19.0'}
 
+  unicode-confusables@0.1.1:
+    resolution: {integrity: sha512-XTPBWmT88BDpXz9NycWk4KxDn+/AJmJYYaYBwuIH9119sopwk2E9GxU9azc+JNbhEsfiPul78DGocEihCp6MFQ==}
+
   uri-js@4.4.1:
     resolution: {integrity: sha512-7rKUyy33Q1yc98pQ1DAmLtwX109F7TIfWlW1Ydo8Wl1ii1SeHieeh0HHfPeL2fMXK6z0s8ecKs9frCuLJvndBg==}
 
@@ -3669,6 +3675,8 @@ snapshots:
   undici-types@7.16.0: {}
 
   undici@8.2.0: {}
+
+  unicode-confusables@0.1.1: {}
 
   uri-js@4.4.1:
     dependencies:

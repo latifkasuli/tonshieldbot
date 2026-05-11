@@ -5,6 +5,7 @@ import {
   resolveById,
   resolveChannelOrSupergroup,
   resolveUserOrBot,
+  type BrandWatchlistEntry,
   type TelegramIntelClient,
 } from "@tonshield/telegram-intel";
 import { scanTelegramEntity } from "../src/telegram/scanner.ts";
@@ -306,5 +307,269 @@ describe("scanTelegramEntity — forwarded message path", () => {
     );
 
     expect(ruleIds(result.findings)).toEqual(["TELEGRAM_USERNAME_RECENTLY_CHANGED"]);
+  });
+});
+
+// ── M3 PR-3: handle / display-name impersonation ───────────────────────────
+//
+// These pin the rule emissions for `TELEGRAM_HANDLE_IMPERSONATES_PROJECT`
+// and `TELEGRAM_DISPLAY_NAME_HOMOGLYPH`. The matcher itself is covered by
+// unit tests in `@tonshield/telegram-intel/test/handle-similarity.test.ts`;
+// here we only assert the scanner orchestrates it correctly and the
+// evidence shape lands as the design doc specifies.
+
+const impersonationWatchlist: readonly BrandWatchlistEntry[] = [
+  {
+    brand: "Tonkeeper",
+    category: "wallet",
+    matchKeys: ["tonkeeper", "tonkeeper_support"],
+    legitimateHandles: ["tonkeeper"],
+  },
+  {
+    brand: "Binance",
+    category: "exchange",
+    matchKeys: ["binance", "binancesupport"],
+    legitimateHandles: [],
+  },
+];
+
+describe("scanTelegramEntity — handle impersonation", () => {
+  it("fires TELEGRAM_HANDLE_IMPERSONATES_PROJECT on a cold-resolution user/bot handle that matches the watchlist", async () => {
+    // User submits `@tonkeeper_support` cold. Bot API can't resolve it,
+    // so we emit TELEGRAM_ENTITY_NOT_RESOLVABLE. But the impersonation
+    // check runs BEFORE resolution so the user still sees the brand
+    // signal — that's the whole point.
+    mockedResolveUserOrBot.mockReturnValue({
+      status: "not_resolvable",
+      reason: "user_or_bot_handle_requires_prior_context",
+      description: null,
+    });
+
+    const result = await scanTelegramEntity(
+      enabledClient,
+      store,
+      { userOrBotHandle: "tonkeeper_support", watchlist: impersonationWatchlist },
+      { now: new Date("2026-05-11T00:00:00Z") },
+    );
+
+    expect(ruleIds(result.findings)).toContain("TELEGRAM_HANDLE_IMPERSONATES_PROJECT");
+    expect(ruleIds(result.findings)).toContain("TELEGRAM_ENTITY_NOT_RESOLVABLE");
+    const impersonation = result.findings.find(
+      (f) => f.ruleId === "TELEGRAM_HANDLE_IMPERSONATES_PROJECT",
+    );
+    expect(impersonation?.evidence).toMatchObject({
+      field: "handle",
+      matchedBrand: "Tonkeeper",
+      strength: "exact",
+    });
+  });
+
+  it("does NOT fire TELEGRAM_HANDLE_IMPERSONATES_PROJECT for a legitimate brand handle", async () => {
+    mockedResolveUserOrBot.mockReturnValue({
+      status: "not_resolvable",
+      reason: "user_or_bot_handle_requires_prior_context",
+      description: null,
+    });
+
+    const result = await scanTelegramEntity(
+      enabledClient,
+      store,
+      { userOrBotHandle: "tonkeeper", watchlist: impersonationWatchlist },
+      { now: new Date("2026-05-11T00:00:00Z") },
+    );
+
+    expect(ruleIds(result.findings)).not.toContain("TELEGRAM_HANDLE_IMPERSONATES_PROJECT");
+  });
+
+  it("fires TELEGRAM_HANDLE_IMPERSONATES_PROJECT on a Cyrillic-homoglyph handle that survives even when Bot API is disabled", async () => {
+    // Even without a Bot API token, we should still surface the
+    // impersonation signal from the candidate handle text alone.
+    const result = await scanTelegramEntity(
+      undefined,
+      store,
+      { userOrBotHandle: "Тоnkeeper", watchlist: impersonationWatchlist },
+      { now: new Date("2026-05-11T00:00:00Z") },
+    );
+
+    expect(ruleIds(result.findings)).toContain("TELEGRAM_HANDLE_IMPERSONATES_PROJECT");
+    expect(ruleIds(result.findings)).toContain("TELEGRAM_BOT_API_NOT_CONFIGURED");
+  });
+
+  it("fires TELEGRAM_HANDLE_IMPERSONATES_PROJECT on resolved username when entity has a typo-handle", async () => {
+    mockedResolveChannel.mockResolvedValue({
+      status: "ok",
+      entity: {
+        id: 100200300n,
+        kind: "channel",
+        username: "tonkeepar",
+        activeUsernames: null,
+        displayName: "Tonkeeper",
+        bio: null,
+        photoFileUniqueId: null,
+        isPremium: null,
+        memberCount: null,
+        isBot: false,
+        raw: {},
+      },
+    });
+
+    const result = await scanTelegramEntity(
+      enabledClient,
+      store,
+      { channelOrSupergroupHandle: "tonkeepar", watchlist: impersonationWatchlist },
+      { now: new Date("2026-05-11T00:00:00Z") },
+    );
+
+    expect(ruleIds(result.findings)).toContain("TELEGRAM_HANDLE_IMPERSONATES_PROJECT");
+    const finding = result.findings.find(
+      (f) => f.ruleId === "TELEGRAM_HANDLE_IMPERSONATES_PROJECT",
+    );
+    expect(finding?.evidence).toMatchObject({
+      matchedBrand: "Tonkeeper",
+      strength: "near",
+      distance: 1,
+    });
+  });
+
+  it("deduplicates TELEGRAM_HANDLE_IMPERSONATES_PROJECT when input handle and resolved username both match", async () => {
+    mockedResolveChannel.mockResolvedValue({
+      status: "ok",
+      entity: {
+        id: 100200300n,
+        kind: "channel",
+        username: "tonkeeper_support",
+        activeUsernames: null,
+        displayName: "Tonkeeper",
+        bio: null,
+        photoFileUniqueId: null,
+        isPremium: null,
+        memberCount: null,
+        isBot: false,
+        raw: {},
+      },
+    });
+
+    const result = await scanTelegramEntity(
+      enabledClient,
+      store,
+      { channelOrSupergroupHandle: "tonkeeper_support", watchlist: impersonationWatchlist },
+      { now: new Date("2026-05-11T00:00:00Z") },
+    );
+
+    const impersonationFindings = result.findings.filter(
+      (f) => f.ruleId === "TELEGRAM_HANDLE_IMPERSONATES_PROJECT",
+    );
+    expect(impersonationFindings).toHaveLength(1);
+  });
+});
+
+describe("scanTelegramEntity — display name homoglyph", () => {
+  it("fires TELEGRAM_DISPLAY_NAME_HOMOGLYPH when display name is a Cyrillic homoglyph of a brand", async () => {
+    mockedResolveChannel.mockResolvedValue({
+      status: "ok",
+      entity: {
+        id: 100200300n,
+        kind: "channel",
+        username: "fake_tonkeeper_news_777",
+        activeUsernames: null,
+        // Cyrillic Т and о — visually "Tonkeeper".
+        displayName: "Тоnkeeper",
+        bio: null,
+        photoFileUniqueId: null,
+        isPremium: null,
+        memberCount: null,
+        isBot: false,
+        raw: {},
+      },
+    });
+
+    const result = await scanTelegramEntity(
+      enabledClient,
+      store,
+      {
+        channelOrSupergroupHandle: "fake_tonkeeper_news_777",
+        watchlist: impersonationWatchlist,
+      },
+      { now: new Date("2026-05-11T00:00:00Z") },
+    );
+
+    expect(ruleIds(result.findings)).toContain("TELEGRAM_DISPLAY_NAME_HOMOGLYPH");
+    const finding = result.findings.find((f) => f.ruleId === "TELEGRAM_DISPLAY_NAME_HOMOGLYPH");
+    expect(finding?.evidence).toMatchObject({
+      field: "display_name",
+      matchedBrand: "Tonkeeper",
+      strength: "exact",
+    });
+  });
+
+  it("does NOT fire TELEGRAM_DISPLAY_NAME_HOMOGLYPH for the legitimate brand handle even when display name matches", async () => {
+    mockedResolveChannel.mockResolvedValue({
+      status: "ok",
+      entity: {
+        id: 100200300n,
+        kind: "channel",
+        username: "tonkeeper",
+        activeUsernames: null,
+        displayName: "Tonkeeper",
+        bio: null,
+        photoFileUniqueId: null,
+        isPremium: null,
+        memberCount: null,
+        isBot: false,
+        raw: {},
+      },
+    });
+
+    const result = await scanTelegramEntity(
+      enabledClient,
+      store,
+      { channelOrSupergroupHandle: "tonkeeper", watchlist: impersonationWatchlist },
+      { now: new Date("2026-05-11T00:00:00Z") },
+    );
+
+    expect(ruleIds(result.findings)).not.toContain("TELEGRAM_DISPLAY_NAME_HOMOGLYPH");
+    expect(ruleIds(result.findings)).not.toContain("TELEGRAM_HANDLE_IMPERSONATES_PROJECT");
+  });
+
+  it("prefers the strongest match across display_name and bio fields (single finding only)", async () => {
+    mockedResolveChannel.mockResolvedValue({
+      status: "ok",
+      entity: {
+        id: 100200300n,
+        kind: "channel",
+        username: "scam_channel_xyz",
+        activeUsernames: null,
+        // Display name a typo-distance away from Binance.
+        displayName: "Binancce",
+        // Bio is an exact skeleton-match of Tonkeeper.
+        bio: "Official Тоnkeeper support channel",
+        photoFileUniqueId: null,
+        isPremium: null,
+        memberCount: null,
+        isBot: false,
+        raw: {},
+      },
+    });
+
+    const result = await scanTelegramEntity(
+      enabledClient,
+      store,
+      {
+        channelOrSupergroupHandle: "scam_channel_xyz",
+        watchlist: impersonationWatchlist,
+      },
+      { now: new Date("2026-05-11T00:00:00Z") },
+    );
+
+    const homoglyphFindings = result.findings.filter(
+      (f) => f.ruleId === "TELEGRAM_DISPLAY_NAME_HOMOGLYPH",
+    );
+    expect(homoglyphFindings).toHaveLength(1);
+    expect(homoglyphFindings[0]?.evidence).toMatchObject({
+      field: "bio",
+      matchedBrand: "Tonkeeper",
+      matchedKey: "tonkeeper_support",
+      strength: "exact",
+    });
   });
 });

@@ -1,0 +1,159 @@
+[
+  {
+    "brand": "Tonkeeper",
+    "category": "wallet",
+    "matchKeys": [
+      "tonkeeper",
+      "tonkeeper_wallet",
+      "tonkeeperwallet",
+      "tonkeeper_support",
+      "tonkeepersupport",
+      "tonkeeper_official",
+      "tonkeeperofficial"
+    ],
+    "legitimateHandles": ["tonkeeper"],
+    "notes": "Tonkeeper wallet. Per tonkeeper.helpscoutdocs.com/article/123, no one from the Tonkeeper team will ever contact you first. Impersonation cluster commonly uses *_support and *_official suffixes."
+  },
+  {
+    "brand": "Wallet (Telegram)",
+    "category": "wallet",
+    "matchKeys": ["wallet", "telegramwallet", "telegram_wallet", "walletsupport", "wallet_support"],
+    "legitimateHandles": ["wallet"],
+    "notes": "Telegram's first-party crypto wallet bot (@wallet). Common impersonation: *_support, *_help."
+  },
+  {
+    "brand": "Tonhub",
+    "category": "wallet",
+    "matchKeys": ["tonhub", "tonhubwallet", "tonhub_wallet", "tonhub_support", "tonhubsupport"],
+    "legitimateHandles": ["tonhub"],
+    "notes": "Tonhub wallet."
+  },
+  {
+    "brand": "Fragment",
+    "category": "marketplace",
+    "matchKeys": [
+      "fragment",
+      "fragmentcom",
+      "fragment_com",
+      "fragmentofficial",
+      "fragment_official",
+      "fragmentoffersrobot",
+      "fragment_offers_robot"
+    ],
+    "legitimateHandles": [],
+    "notes": "Fragment (fragment.com) is the TON username and gift marketplace. Fragment does NOT have a Telegram support bot — all support is via the website. p05h documented the 'FragmentOffersRoBot' (capital B) impersonation."
+  },
+  {
+    "brand": "Binance",
+    "category": "exchange",
+    "matchKeys": [
+      "binance",
+      "binancesupport",
+      "binance_support",
+      "binanceofficial",
+      "binance_official",
+      "binance_help",
+      "binancehelp"
+    ],
+    "legitimateHandles": [],
+    "notes": "Binance has NO official Telegram support presence per their FAQs 360001153311 and 360020555572. Any Binance-named Telegram entity is impersonation."
+  },
+  {
+    "brand": "Coinbase",
+    "category": "exchange",
+    "matchKeys": [
+      "coinbase",
+      "coinbasesupport",
+      "coinbase_support",
+      "coinbase_official",
+      "coinbaseofficial",
+      "coinbasehelp",
+      "coinbase_help",
+      "cbsupportchat",
+      "cb_support_chat"
+    ],
+    "legitimateHandles": [],
+    "notes": "Coinbase explicitly states it has no Telegram support presence (Coinbase security blog: 'Anatomy of a Telegram Scam'). Named impersonator handles include @Leocrypto22 and @CBSupportchat."
+  },
+  {
+    "brand": "TON Foundation",
+    "category": "infra",
+    "matchKeys": [
+      "tonfoundation",
+      "ton_foundation",
+      "tonofficial",
+      "ton_official",
+      "tonblockchain",
+      "ton_blockchain"
+    ],
+    "legitimateHandles": ["toncoin"],
+    "notes": "TON Foundation maintains blog.ton.org/how-to-stay-safe-on-ton-and-telegram. Common impersonation: '*_foundation' bots claiming staking/airdrop campaigns."
+  },
+  {
+    "brand": "Notcoin",
+    "category": "mini_app_platform",
+    "matchKeys": ["notcoin", "notcoin_bot", "notcoinbot", "notcoin_official", "notcoinofficial"],
+    "legitimateHandles": ["notcoin_bot"],
+    "notes": "Notcoin Mini App / token. Real bot is @notcoin_bot."
+  },
+  {
+    "brand": "Hamster Kombat",
+    "category": "mini_app_platform",
+    "matchKeys": ["hamsterkombat", "hamster_kombat", "hamsterkombatbot", "hamsterkombat_bot"],
+    "legitimateHandles": ["hamster_kombat_bot"],
+    "notes": "Hamster Kombat Mini App."
+  },
+  {
+    "brand": "MetaMask",
+    "category": "wallet",
+    "matchKeys": [
+      "metamask",
+      "metamasksupport",
+      "metamask_support",
+      "metamask_official",
+      "metamaskofficial"
+    ],
+    "legitimateHandles": [],
+    "notes": "MetaMask is a browser/mobile extension wallet, NOT a Telegram bot. Any MetaMask-named Telegram entity is impersonation."
+  },
+  {
+    "brand": "Trust Wallet",
+    "category": "wallet",
+    "matchKeys": ["trustwallet", "trust_wallet", "trustwalletsupport", "trustwallet_support"],
+    "legitimateHandles": [],
+    "notes": "Trust Wallet themselves published a write-up on Telegram-malware impersonation campaigns using fake influencer accounts."
+  },
+  {
+    "brand": "Phantom Wallet",
+    "category": "wallet",
+    "matchKeys": [
+      "phantom",
+      "phantomwallet",
+      "phantom_wallet",
+      "phantomsupport",
+      "phantom_support"
+    ],
+    "legitimateHandles": [],
+    "notes": "Phantom is a Solana wallet. Kaspersky documented a 2,000% surge in fake 'wallet verifier' bots late 2024."
+  },
+  {
+    "brand": "Safeguard",
+    "category": "other",
+    "matchKeys": [
+      "safeguard",
+      "safeguardrobot",
+      "safeguard_robot",
+      "officialsafeguardbot",
+      "official_safeguard_bot"
+    ],
+    "legitimateHandles": ["safeguardrobot"],
+    "notes": "Real bot is @SafeguardRobot. The 'OfficialSafeguardBot' impersonation campaign is well-documented."
+  },
+  {
+    "brand": "Ledger",
+    "category": "wallet",
+    "matchKeys": ["ledger", "ledgerwallet", "ledger_wallet", "ledgersupport", "ledger_support"],
+    "legitimateHandles": [],
+    "notes": "Ledger is a hardware-wallet brand. Any Telegram bot offering Ledger 'support' or 'recovery' is impersonation."
+  }
+]

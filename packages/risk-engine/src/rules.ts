@@ -360,6 +360,28 @@ export const coreRules = [
       "Treat as if no risk signal is available for this link yet. For TON-NFT collectibles, verify ownership at fragment.com directly until M3 PR-6 ships the gift catalog. For Mini App URLs, treat the dApp with the usual scepticism until M3 PR-5 ships content scanning.",
     defaultScoreDelta: 5,
   },
+  {
+    id: "TELEGRAM_HANDLE_IMPERSONATES_PROJECT",
+    category: "telegram",
+    severity: "high",
+    title: "Handle resembles a well-known project",
+    description:
+      "The submitted Telegram handle is visually identical or near-identical to a watchlist entry for an established project (wallet, exchange, infrastructure brand, Mini App). TR39 confusables skeleton + Damerau-Levenshtein ≤ 1 or (== 2 with Jaro-Winkler ≥ 0.92) all flag impersonation candidates. Real impersonation campaigns use Cyrillic homoglyphs, single-character typos, and `_support`/`_official` suffixes — all caught here.",
+    recommendation:
+      "Do not interact with this handle as if it were the real project. Verify through the project's official website. Common-sense reality check: most wallets and exchanges do NOT have Telegram support presences; if you got DM'd, it's almost certainly an impersonator.",
+    defaultScoreDelta: 45,
+  },
+  {
+    id: "TELEGRAM_DISPLAY_NAME_HOMOGLYPH",
+    category: "telegram",
+    severity: "high",
+    title: "Display name uses Unicode confusables resembling a known project",
+    description:
+      "Telegram usernames are ASCII-only by regex, but `first_name`, `last_name`, channel `title`, and `bio` accept full Unicode — and that is where homoglyph attacks land. After NFKC normalisation and TR39 confusables-stripping, the display name's skeleton matches a watchlist brand. Common attacks: Cyrillic `Тоnkeeper`, Greek `Bіnance`, Cherokee `СoinЬase`. Zero-width chars (ZWJ/ZWNJ/ZWSP/BOM) are stripped before comparison so invisible-glyph evasion fails.",
+    recommendation:
+      "Do not trust the display name. Verify the entity through its canonical handle and official website. Note the handle separately from the display name — Telegram clients render the homoglyph as the brand, but the underlying handle (which is ASCII-only) will not match the legitimate one.",
+    defaultScoreDelta: 45,
+  },
 ] as const satisfies readonly RuleDefinition[];
 
 export type CoreRuleId = (typeof coreRules)[number]["id"];
