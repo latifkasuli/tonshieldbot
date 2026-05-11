@@ -6,6 +6,7 @@ import {
   createPostgresApiKeyStore,
   createPostgresClient,
   createPostgresReportStore,
+  createPostgresTelegramEntityStore,
   createPostgresTenantStore,
 } from "../src/postgres/index.ts";
 import type { PostgresClient } from "../src/postgres/index.ts";
@@ -77,7 +78,7 @@ describe.skipIf(databaseUrl === undefined || databaseUrl.length === 0)(
       // Cascade clears api_keys via FK. reports has no FKs so we list it
       // explicitly. Using TRUNCATE keeps tests fast versus DELETE.
       await requireClient().db.execute(
-        sql`TRUNCATE TABLE api_keys, reports, tenants RESTART IDENTITY CASCADE`,
+        sql`TRUNCATE TABLE api_keys, reports, telegram_entities, tenants RESTART IDENTITY CASCADE`,
       );
     });
 
@@ -225,6 +226,51 @@ describe.skipIf(databaseUrl === undefined || databaseUrl.length === 0)(
           expect(fetched.input.manifestUrl).toBeInstanceOf(URL);
           expect(fetched.input.manifestUrl.hostname).toBe("identity-test.example");
         }
+      });
+    });
+
+    describe("TelegramEntityStore", () => {
+      const baseSnapshotInput = {
+        entityId: 123456789n,
+        entityKind: "channel" as const,
+        observedAt: new Date("2026-05-11T09:00:00Z"),
+        username: "tonshield",
+        activeUsernames: null,
+        displayName: "TON Shield",
+        bio: null,
+        photoFileUniqueId: null,
+        isPremium: null,
+        memberCount: null,
+        isBot: false,
+        source: "getChat" as const,
+        raw: null,
+      };
+
+      it("serializes concurrent identical snapshots so cooldown suppression still applies", async () => {
+        const store = createPostgresTelegramEntityStore(requireClient().db);
+
+        const results = await Promise.all([
+          store.recordSnapshot(baseSnapshotInput, { cooldownMs: 60_000 }),
+          store.recordSnapshot(baseSnapshotInput, { cooldownMs: 60_000 }),
+        ]);
+
+        expect(results.filter((result) => result.inserted)).toHaveLength(1);
+        expect(await store.recentSnapshots(123456789n, 10)).toHaveLength(1);
+      });
+
+      it("findEntityByUsername ignores historical bindings", async () => {
+        const store = createPostgresTelegramEntityStore(requireClient().db);
+        await store.recordSnapshot(baseSnapshotInput);
+        await store.recordSnapshot({
+          ...baseSnapshotInput,
+          observedAt: new Date("2026-05-11T10:00:00Z"),
+          username: "tonshield_v2",
+        });
+
+        expect(await store.findEntityByUsername("tonshield")).toBeNull();
+        expect(await store.findEntityByUsername("TONSHIELD_V2")).toMatchObject({
+          id: 123456789n,
+        });
       });
     });
   },

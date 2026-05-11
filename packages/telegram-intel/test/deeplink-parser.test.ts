@@ -118,15 +118,22 @@ describe("parseTelegramUrl — t.me deep links", () => {
 });
 
 describe("parseTelegramUrl — tg:// scheme", () => {
-  it("recognises tg://addBusinessBot?bot=<bot>&rights=<flags>", () => {
-    const result = parse("tg://addBusinessBot?bot=somebot&rights=can_reply,can_transfer_stars");
+  it("recognises tg://addBusinessBot?bot=<bot>&rights=<flags> and keeps rights on payload only", () => {
+    const result = parse(
+      "tg://addBusinessBot?bot=somebot&rights=can_reply,can_transfer_stars&campaign=summer",
+    );
 
     expect(result.kind).toBe("deeplink");
     if (result.kind === "deeplink") {
       expect(result.action).toBe("addBusinessBot");
       expect(result.target).toBe("somebot");
+      // `rights` is the primary action argument — lives on payload only.
       expect(result.payload).toBe("can_reply,can_transfer_stars");
-      expect(result.extras.rights).toBe("can_reply,can_transfer_stars");
+      // Not duplicated into extras. `bot` is the target, also excluded.
+      expect(result.extras).not.toHaveProperty("rights");
+      expect(result.extras).not.toHaveProperty("bot");
+      // Unrelated params land in extras so the cache key captures them.
+      expect(result.extras.campaign).toBe("summer");
     }
   });
 
@@ -171,6 +178,25 @@ describe("parseTelegramUrl — non-Telegram and edge cases", () => {
     expect(parse("https://t.me/abc").kind).toBe("not_deeplink");
     // Contains a hyphen — not allowed in handles.
     expect(parse("https://t.me/some-bot").kind).toBe("not_deeplink");
+  });
+
+  it("accepts a 4-char handle (Fragment collectible minimum)", () => {
+    // Telegram itself rejects 4-char basic-tier registration but Fragment
+    // sells 4-char collectibles. Accepting 4 here keeps the t.me URL path
+    // segment validator and the bare @handle classifier symmetric, so a
+    // 4-char Fragment handle classifies the same way in either form.
+    expect(parse("https://t.me/abcd").kind).toBe("plain_handle");
+  });
+
+  it("returns not_deeplink for reserved t.me prefixes (no scannable handle)", () => {
+    // These all fail the username regex on the first path segment and
+    // surface as not_deeplink. The classifier then treats them as
+    // `telegram_url` with `handle: null`, which `basic-scan.ts` maps onto
+    // `TELEGRAM_INPUT_RECOGNISED_NOT_SCANNED` so the user sees an
+    // explicit skip rather than a falsely-clean report.
+    expect(parse("https://t.me/c/12345/67").kind).toBe("not_deeplink");
+    expect(parse("https://t.me/joinchat/AAAAA").kind).toBe("not_deeplink");
+    expect(parse("https://t.me/+abcdefg").kind).toBe("not_deeplink");
   });
 
   it("captures `mode=fullscreen` as extras on a startapp link", () => {

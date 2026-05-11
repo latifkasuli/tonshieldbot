@@ -168,3 +168,19 @@ describe("in-memory TelegramEntityStore — usernameHistory", () => {
     expect(history[2]?.boundTo?.toISOString()).toBe("2026-03-01T00:00:00.000Z");
   });
 });
+
+describe("in-memory TelegramEntityStore — findEntityByUsername", () => {
+  it("returns only the entity currently bound to a username, not historical holders", async () => {
+    const store = createInMemoryTelegramEntityStore();
+    await store.recordSnapshot(baseInput({ username: "oldhandle" }));
+    await store.recordSnapshot(
+      baseInput({
+        observedAt: new Date("2026-05-11T00:00:00Z"),
+        username: "newhandle",
+      }),
+    );
+
+    expect(await store.findEntityByUsername("oldhandle")).toBeNull();
+    expect(await store.findEntityByUsername("newhandle")).toMatchObject({ id: 12345n });
+  });
+});

@@ -12,4 +12,4 @@ export {
   resolveUserOrBot,
   resolvedEntityFromUser,
 } from "./entity-resolver.ts";
-export type { ResolvedEntity, ResolverResult } from "./entity-resolver.ts";
+export type { NotResolvableReason, ResolvedEntity, ResolverResult } from "./entity-resolver.ts";

@@ -1,4 +1,4 @@
-import { and, desc, eq, sql } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import type {
   RecordSnapshotResult,
   TelegramEntity,
@@ -70,6 +70,11 @@ export const createPostgresTelegramEntityStore = (db: StorageDb): TelegramEntity
     const cooldownMs = options.cooldownMs ?? 0;
 
     return await db.transaction(async (tx) => {
+      // Serialize snapshot writes per Telegram entity. Without this, two
+      // concurrent identical observations can both read the same previous row
+      // and both insert, bypassing the content-aware cooldown.
+      await tx.execute(sql`select pg_advisory_xact_lock(${input.entityId.toString()}::bigint)`);
+
       const previousRows = (await tx
         .select()
         .from(telegramEntitySnapshots)
@@ -173,33 +178,43 @@ export const createPostgresTelegramEntityStore = (db: StorageDb): TelegramEntity
 
   async findEntityByUsername(username) {
     const lowered = username.toLowerCase();
-    const rows = (await db
+    const candidateRows = (await db
       .select()
       .from(telegramEntitySnapshots)
-      .where(
-        and(
-          eq(telegramEntitySnapshots.username, lowered),
-          // We don't have an index on the join; the username index plus a
-          // small per-entity LIMIT keeps this cheap for the watchlist
-          // sizes we care about in PR-2.
-        ),
-      )
+      .where(eq(telegramEntitySnapshots.username, lowered))
       .orderBy(desc(telegramEntitySnapshots.observedAt))
-      .limit(1)) as readonly DbSnapshotRow[];
+      .limit(50)) as readonly DbSnapshotRow[];
 
-    const firstSnap = rows[0];
-    if (firstSnap === undefined) {
-      return null;
+    // The username index can return historical bindings. The interface asks
+    // for the entity currently bound to a username, so verify each candidate's
+    // latest snapshot still carries the handle before returning it.
+    for (const candidate of candidateRows) {
+      const latestRows = (await db
+        .select()
+        .from(telegramEntitySnapshots)
+        .where(eq(telegramEntitySnapshots.entityId, candidate.entityId))
+        .orderBy(desc(telegramEntitySnapshots.observedAt))
+        .limit(1)) as readonly DbSnapshotRow[];
+      const latestRow = latestRows[0];
+      const latest = latestRow === undefined ? null : toSnapshot(latestRow);
+
+      if (latest?.username?.toLowerCase() !== lowered) {
+        continue;
+      }
+
+      const entityRows = (await db
+        .select()
+        .from(telegramEntities)
+        .where(eq(telegramEntities.id, candidate.entityId))
+        .limit(1)) as readonly DbEntityRow[];
+
+      const entity = entityRows[0];
+      if (entity !== undefined) {
+        return toEntity(entity);
+      }
     }
 
-    const entityRows = (await db
-      .select()
-      .from(telegramEntities)
-      .where(eq(telegramEntities.id, firstSnap.entityId))
-      .limit(1)) as readonly DbEntityRow[];
-
-    const entity = entityRows[0];
-    return entity === undefined ? null : toEntity(entity);
+    return null;
   },
 
   async usernameHistory(entityId) {

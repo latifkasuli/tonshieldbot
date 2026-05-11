@@ -5,6 +5,7 @@ import {
   resolveById,
   resolveChannelOrSupergroup,
   resolveUserOrBot,
+  type NotResolvableReason,
   type ResolvedEntity,
   type ResolverResult,
   type TelegramIntelClient,
@@ -170,7 +171,7 @@ const snapshotAndDiff = async (
 
 const mapNonOkResolverResult = (
   result: ResolverResult,
-  fallbackReason: "channel_or_supergroup_not_found" | "user_or_bot_handle_requires_prior_context",
+  fallbackReason: NotResolvableReason,
 ): TelegramScanResult => {
   if (result.status === "disabled") {
     return single(emulationFinding("TELEGRAM_BOT_API_NOT_CONFIGURED"));

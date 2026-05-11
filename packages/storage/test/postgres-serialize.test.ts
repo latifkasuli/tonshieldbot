@@ -4,6 +4,7 @@ import type {
   GenericUrlInput,
   ManifestUrlInput,
   ScanInput,
+  TelegramDeeplinkInput,
   TelegramHandleInput,
   TelegramUrlInput,
   TonAddressInput,
@@ -69,6 +70,22 @@ describe("ScanInput serialize/deserialize round-trip", () => {
       expect(result.handle).toBeNull();
       expect(result.url.toString()).toBe("https://t.me/x");
     }
+  });
+
+  it("round-trips a Telegram deeplink preserving extras", () => {
+    const input: TelegramDeeplinkInput = {
+      kind: "telegram_deeplink",
+      raw: "https://t.me/somebot?startapp=foo&mode=fullscreen",
+      normalized: "https://t.me/somebot?startapp=foo&mode=fullscreen",
+      url: new URL("https://t.me/somebot?startapp=foo&mode=fullscreen"),
+      action: "startapp",
+      target: "somebot",
+      appShortName: null,
+      payload: "foo",
+      extras: { mode: "fullscreen" },
+    };
+
+    expect(roundTrip(input)).toEqual(input);
   });
 
   it("round-trips manifest_url and generic_url URLs", () => {

@@ -63,6 +63,14 @@ export interface TelegramDeeplinkInput extends BaseScanInput {
   readonly appShortName: string | null;
   /** The action-specific payload string (the right-hand side of the `start*=` query). */
   readonly payload: string | null;
+  /**
+   * Additional query parameters the parser captured (e.g. `mode=fullscreen`
+   * on a startapp link, `admin=<perms>` on startgroup, `attach=<bot>` on a
+   * peer-side startattach install, business-bot rights flags on addBusinessBot).
+   * Carried through to evidence and the canonical hash so URLs that differ
+   * only by these flags don't dedupe accidentally.
+   */
+  readonly extras: Readonly<Record<string, string>>;
 }
 
 /**
@@ -77,6 +85,12 @@ export interface TelegramDeeplinkInput extends BaseScanInput {
  * App context. Plain web URLs remain `generic_url` even if their content
  * happens to embed Telegram's Mini App SDK — we don't statically guess at
  * intent.
+ *
+ * **PR-2 state:** the type is declared (so the canonical-hash, serializer,
+ * and cacheability code can branch on it forward-compatibly), but
+ * `classifyInput` does NOT yet emit it — there is no Mini App context
+ * upstream of `classifyInput` to mark a URL as Mini-App-hosted. PR-5 wires
+ * the upstream context. Until then, Mini App URLs land as `generic_url`.
  */
 export interface TelegramMiniappUrlInput extends BaseScanInput {
   readonly kind: "telegram_miniapp_url";

@@ -166,21 +166,42 @@ const gatherScanResult = async (input: ScanInput, deps: GatherDeps): Promise<Gat
     return { findings: bocResult.findings, actions: bocResult.actions };
   }
 
-  // M3 PR-2: Telegram-shaped inputs. The scanner needs a snapshot store;
-  // when it's absent (callers haven't wired it yet), we return an empty
-  // result — same fail-soft posture as the rest of the gather pipeline.
+  // M3 PR-2: Telegram-shaped inputs.
+  //
+  // Three branches degrade explicitly with `TELEGRAM_INPUT_RECOGNISED_NOT_SCANNED`
+  // (info, +5) so the user sees that we identified the input but the
+  // deeper scanner for this specific kind isn't wired yet. Without this,
+  // an NFT link or a `t.me/+invite` URL would silently produce a clean
+  // report — which is a worse failure mode than admitting we skipped.
+  //
+  //   1. `telegram_handle` / `telegram_url` / `telegram_deeplink` with no
+  //      resolvable target (e.g. `t.me/c/<id>/...`, `t.me/+...`,
+  //      `t.me/joinchat/...` — none of which have a username segment).
+  //   2. `telegram_miniapp_url` and `telegram_nft_link` — kinds the
+  //      classifier recognises but whose scanners land in PR-5 / PR-6.
+  //   3. `telegram_entities` store missing — caller misconfiguration; we
+  //      surface a finding rather than silently empty out the report.
   if (
     input.kind === "telegram_handle" ||
     input.kind === "telegram_url" ||
-    input.kind === "telegram_deeplink"
+    input.kind === "telegram_deeplink" ||
+    input.kind === "telegram_miniapp_url" ||
+    input.kind === "telegram_nft_link"
   ) {
     if (deps.telegramEntities === undefined) {
-      return { findings: [], actions: [] };
+      return inputRecognisedNotScanned(input.kind, "snapshot_store_not_wired");
+    }
+
+    if (input.kind === "telegram_miniapp_url" || input.kind === "telegram_nft_link") {
+      // PR-5/PR-6 scope. Classifier recognises the kind; scanner is
+      // deferred. Emit the placeholder finding so the user sees the
+      // skip explicitly.
+      return inputRecognisedNotScanned(input.kind, "scanner_not_implemented_yet");
     }
 
     const scanInput = telegramScanInputFor(input);
     if (scanInput === null) {
-      return { findings: [], actions: [] };
+      return inputRecognisedNotScanned(input.kind, "no_resolvable_handle_in_url");
     }
 
     const result = await scanTelegramEntity(deps.telegramIntel, deps.telegramEntities, scanInput, {
@@ -191,6 +212,23 @@ const gatherScanResult = async (input: ScanInput, deps: GatherDeps): Promise<Gat
 
   return { findings: [], actions: [] };
 };
+
+const inputRecognisedNotScanned = (
+  inputKind: ScanInput["kind"],
+  reason:
+    | "snapshot_store_not_wired"
+    | "scanner_not_implemented_yet"
+    | "no_resolvable_handle_in_url",
+): GatherResult => ({
+  findings: [
+    createFinding({
+      confidence: "low",
+      evidence: { inputKind, reason },
+      rule: getCoreRule("TELEGRAM_INPUT_RECOGNISED_NOT_SCANNED"),
+    }),
+  ],
+  actions: [],
+});
 
 /**
  * Maps a classified Telegram-shaped input to the field set the scanner

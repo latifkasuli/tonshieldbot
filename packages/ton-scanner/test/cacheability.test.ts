@@ -86,6 +86,7 @@ describe("isScanResultCacheable", () => {
     target: "somebot",
     appShortName: null,
     payload: "foo",
+    extras: {},
   });
 
   it("returns true for telegram_handle when telegramIntelEnabled is false (no live state to invalidate)", () => {
