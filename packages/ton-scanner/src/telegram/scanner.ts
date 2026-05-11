@@ -2,13 +2,18 @@ import { createFinding, getCoreRule } from "@tonshield/risk-engine";
 import type { ActionPreview, RiskFinding } from "@tonshield/shared";
 import {
   classifyBotApiFailure,
+  isFiringStrength,
+  matchAgainstWatchlist,
   resolveById,
   resolveChannelOrSupergroup,
   resolveUserOrBot,
+  seedWatchlist,
+  type BrandWatchlistEntry,
   type NotResolvableReason,
   type ResolvedEntity,
   type ResolverResult,
   type TelegramIntelClient,
+  type WatchlistMatch,
 } from "@tonshield/telegram-intel";
 import type { TelegramEntityStore } from "@tonshield/storage";
 
@@ -40,6 +45,12 @@ export interface ScanTelegramEntityInput {
    * never `getChat`-resolved.
    */
   readonly forwardOriginUser?: ResolvedEntity;
+  /**
+   * Optional override of the impersonation watchlist. Defaults to the
+   * curated seed bundled with `@tonshield/telegram-intel`. Tests inject
+   * their own minimal lists; production wires the seed.
+   */
+  readonly watchlist?: readonly BrandWatchlistEntry[];
 }
 
 /**
@@ -62,20 +73,44 @@ export const scanTelegramEntity = async (
 ): Promise<TelegramScanResult> => {
   const now = options.now ?? new Date();
   const cooldownMs = options.snapshotCooldownMs ?? DEFAULT_SNAPSHOT_COOLDOWN_MS;
+  const watchlist = input.watchlist ?? seedWatchlist;
+
+  // Impersonation checks on the candidate handle run BEFORE resolution so
+  // they fire even when Bot API can't be called or returns not-resolvable.
+  // The user submitting `@tonkeeper_support` should see the impersonation
+  // signal regardless of whether the handle resolves.
+  const inputHandleFindings = checkCandidateHandle(
+    input.channelOrSupergroupHandle ?? input.userOrBotHandle ?? null,
+    watchlist,
+  );
 
   // ── Forwarded-origin user/bot — no Bot API call needed ────────────────
   if (input.forwardOriginUser !== undefined) {
-    return await snapshotAndDiff(store, input.forwardOriginUser, "forward", now, cooldownMs);
+    const downstream = await snapshotAndDiff(
+      store,
+      input.forwardOriginUser,
+      "forward",
+      now,
+      cooldownMs,
+    );
+    const impersonation = checkResolvedEntity(input.forwardOriginUser, watchlist);
+    return mergeResults(inputHandleFindings, impersonation, downstream);
   }
 
   if (client?.enabled !== true) {
-    return single(emulationFinding("TELEGRAM_BOT_API_NOT_CONFIGURED"));
+    return mergeResults(
+      inputHandleFindings,
+      single(emulationFinding("TELEGRAM_BOT_API_NOT_CONFIGURED")),
+    );
   }
 
   // ── Cold user/bot @handle path — always not-resolvable ───────────────
   if (input.userOrBotHandle !== undefined) {
     const result = resolveUserOrBot(input.userOrBotHandle);
-    return mapNonOkResolverResult(result, "user_or_bot_handle_requires_prior_context");
+    return mergeResults(
+      inputHandleFindings,
+      mapNonOkResolverResult(result, "user_or_bot_handle_requires_prior_context"),
+    );
   }
 
   let result: ResolverResult;
@@ -87,24 +122,32 @@ export const scanTelegramEntity = async (
   } else {
     // No input fields populated — caller programming error, not a user
     // error. Treat as not-resolvable with a generic reason.
-    return single(
-      createFinding({
-        confidence: "low",
-        evidence: { reason: "no_resolvable_target_in_scan_input" },
-        rule: getCoreRule("TELEGRAM_ENTITY_NOT_RESOLVABLE"),
-      }),
+    return mergeResults(
+      inputHandleFindings,
+      single(
+        createFinding({
+          confidence: "low",
+          evidence: { reason: "no_resolvable_target_in_scan_input" },
+          rule: getCoreRule("TELEGRAM_ENTITY_NOT_RESOLVABLE"),
+        }),
+      ),
     );
   }
 
   if (result.status === "ok") {
-    return await snapshotAndDiff(store, result.entity, "getChat", now, cooldownMs);
+    const downstream = await snapshotAndDiff(store, result.entity, "getChat", now, cooldownMs);
+    const impersonation = checkResolvedEntity(result.entity, watchlist);
+    return mergeResults(inputHandleFindings, impersonation, downstream);
   }
 
-  return mapNonOkResolverResult(
-    result,
-    input.channelOrSupergroupHandle !== undefined
-      ? "channel_or_supergroup_not_found"
-      : "user_or_bot_handle_requires_prior_context",
+  return mergeResults(
+    inputHandleFindings,
+    mapNonOkResolverResult(
+      result,
+      input.channelOrSupergroupHandle !== undefined
+        ? "channel_or_supergroup_not_found"
+        : "user_or_bot_handle_requires_prior_context",
+    ),
   );
 };
 
@@ -203,6 +246,210 @@ const mapNonOkResolverResult = (
       rule: getCoreRule("TELEGRAM_ENTITY_NOT_RESOLVABLE"),
     }),
   );
+};
+
+// ── impersonation checks ───────────────────────────────────────────────────
+
+/**
+ * Run the watchlist matcher against a candidate handle (the user-submitted
+ * `@somehandle` or the bot/channel target extracted from a URL). Runs
+ * BEFORE Bot API resolution so the impersonation finding surfaces even
+ * when resolution fails — `@tonkeeper_support` should flag whether or not
+ * Bot API can resolve it.
+ *
+ * Returns an empty result when the candidate is `null` or no match meets
+ * firing strength.
+ */
+const checkCandidateHandle = (
+  candidate: string | null,
+  watchlist: readonly BrandWatchlistEntry[],
+): TelegramScanResult => {
+  if (candidate === null) return EMPTY_RESULT;
+
+  const cleaned = candidate.replace(/^@/, "");
+  if (cleaned.length === 0) return EMPTY_RESULT;
+
+  const match = matchAgainstWatchlist(cleaned, watchlist, { candidateHandle: cleaned });
+  if (match === null || !isFiringStrength(match)) return EMPTY_RESULT;
+
+  return single(
+    createFinding({
+      confidence: matchConfidence(match),
+      evidence: {
+        field: "handle",
+        candidate: cleaned,
+        candidateSkeleton: match.candidateSkeleton,
+        matchedBrand: match.brand.brand,
+        matchedBrandCategory: match.brand.category,
+        matchedKey: match.matchedKey,
+        strength: match.strength,
+        distance: match.distance,
+        similarity: Number(match.similarity.toFixed(4)),
+      },
+      rule: getCoreRule("TELEGRAM_HANDLE_IMPERSONATES_PROJECT"),
+    }),
+  );
+};
+
+/**
+ * Run the watchlist matcher against the resolved entity's identifying
+ * fields: `username`, `displayName`, and `bio`. The username check fires
+ * `TELEGRAM_HANDLE_IMPERSONATES_PROJECT`; the displayName and bio checks
+ * fire `TELEGRAM_DISPLAY_NAME_HOMOGLYPH` (display-name attacks live in
+ * the Unicode-permitted fields, not the ASCII-only handle).
+ *
+ * Deduplication: a single entity can fire at most one
+ * `TELEGRAM_HANDLE_IMPERSONATES_PROJECT` (from input handle OR resolved
+ * username) and at most one `TELEGRAM_DISPLAY_NAME_HOMOGLYPH`
+ * (preferring the strongest match across displayName/bio fields). The
+ * scanner's merge step takes care of the cross-checks; this helper just
+ * produces the candidates.
+ */
+const checkResolvedEntity = (
+  entity: ResolvedEntity,
+  watchlist: readonly BrandWatchlistEntry[],
+): TelegramScanResult => {
+  const findings: RiskFinding[] = [];
+
+  // Resolved username → handle-impersonation rule.
+  if (entity.username !== null && entity.username.length > 0) {
+    const match = matchAgainstWatchlist(entity.username, watchlist, {
+      candidateHandle: entity.username,
+    });
+    if (match !== null && isFiringStrength(match)) {
+      findings.push(
+        createFinding({
+          confidence: matchConfidence(match),
+          evidence: {
+            field: "resolved_username",
+            candidate: entity.username,
+            candidateSkeleton: match.candidateSkeleton,
+            matchedBrand: match.brand.brand,
+            matchedBrandCategory: match.brand.category,
+            matchedKey: match.matchedKey,
+            strength: match.strength,
+            distance: match.distance,
+            similarity: Number(match.similarity.toFixed(4)),
+          },
+          rule: getCoreRule("TELEGRAM_HANDLE_IMPERSONATES_PROJECT"),
+        }),
+      );
+    }
+  }
+
+  // Display name + bio → homoglyph rule. Pick the strongest match across
+  // both fields so a single entity can produce at most one finding here.
+  const displayCandidates: { field: string; value: string }[] = [];
+  if (entity.displayName !== null && entity.displayName.length > 0) {
+    displayCandidates.push({ field: "display_name", value: entity.displayName });
+  }
+  if (entity.bio !== null && entity.bio.length > 0) {
+    displayCandidates.push({ field: "bio", value: entity.bio });
+  }
+
+  let bestDisplayMatch: { field: string; value: string; match: WatchlistMatch } | null = null;
+  for (const candidate of displayCandidates) {
+    // For displayName/bio we still pass the entity's username (when present)
+    // as the candidateHandle, so a legitimate handle suppresses the match
+    // even if the display name happens to be the brand verbatim.
+    const candidateHandleArg =
+      entity.username !== null && entity.username.length > 0 ? entity.username : undefined;
+    const match = matchAgainstWatchlist(candidate.value, watchlist, {
+      ...(candidateHandleArg === undefined ? {} : { candidateHandle: candidateHandleArg }),
+    });
+    if (match === null || !isFiringStrength(match)) continue;
+    if (
+      bestDisplayMatch === null ||
+      matchStrengthRank(match) > matchStrengthRank(bestDisplayMatch.match)
+    ) {
+      bestDisplayMatch = { ...candidate, match };
+    }
+  }
+
+  if (bestDisplayMatch !== null) {
+    findings.push(
+      createFinding({
+        confidence: matchConfidence(bestDisplayMatch.match),
+        evidence: {
+          field: bestDisplayMatch.field,
+          candidate: bestDisplayMatch.value,
+          candidateSkeleton: bestDisplayMatch.match.candidateSkeleton,
+          matchedBrand: bestDisplayMatch.match.brand.brand,
+          matchedBrandCategory: bestDisplayMatch.match.brand.category,
+          matchedKey: bestDisplayMatch.match.matchedKey,
+          strength: bestDisplayMatch.match.strength,
+          distance: bestDisplayMatch.match.distance,
+          similarity: Number(bestDisplayMatch.match.similarity.toFixed(4)),
+        },
+        rule: getCoreRule("TELEGRAM_DISPLAY_NAME_HOMOGLYPH"),
+      }),
+    );
+  }
+
+  return { findings, actions: [] };
+};
+
+const matchStrengthRank = (match: WatchlistMatch): number => {
+  switch (match.strength) {
+    case "exact":
+      return 4;
+    case "near":
+      return 3;
+    case "similar":
+      return 2;
+    case "loose":
+      return 1;
+  }
+};
+
+const matchConfidence = (match: WatchlistMatch): "low" | "medium" | "high" => {
+  switch (match.strength) {
+    case "exact":
+      return "high";
+    case "near":
+      return "high";
+    case "similar":
+      return "medium";
+    case "loose":
+      return "low";
+  }
+};
+
+/**
+ * Concatenate multiple `TelegramScanResult`s into one. When two results
+ * fire the SAME ruleId, keep only the highest-confidence finding —
+ * deduplicates the case where the input handle and the resolved username
+ * both flag the same impersonation.
+ */
+const mergeResults = (...results: readonly TelegramScanResult[]): TelegramScanResult => {
+  const findingsByKey = new Map<string, RiskFinding>();
+  const actions: ActionPreview[] = [];
+
+  for (const result of results) {
+    for (const finding of result.findings) {
+      const existing = findingsByKey.get(finding.ruleId);
+      if (
+        existing === undefined ||
+        confidenceRank(finding.confidence) > confidenceRank(existing.confidence)
+      ) {
+        findingsByKey.set(finding.ruleId, finding);
+      }
+    }
+    actions.push(...result.actions);
+  }
+
+  return { findings: Array.from(findingsByKey.values()), actions };
+};
+
+const confidenceRank = (confidence: "low" | "medium" | "high"): number => {
+  switch (confidence) {
+    case "low":
+      return 0;
+    case "medium":
+      return 1;
+    case "high":
+      return 2;
+  }
 };
 
 // ── helpers ─────────────────────────────────────────────────────────────────

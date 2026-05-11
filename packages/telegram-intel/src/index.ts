@@ -7,6 +7,16 @@ export type { BotApiFailure } from "./failure.ts";
 export { parseTelegramUrl } from "./deeplink-parser.ts";
 export type { ParsedTelegramUrl } from "./deeplink-parser.ts";
 export {
+  damerauLevenshtein,
+  isFiringStrength,
+  jaro,
+  jaroWinkler,
+  matchAgainstWatchlist,
+  normalize,
+} from "./handle-similarity.ts";
+export type { BrandWatchlistEntry, MatchStrength, WatchlistMatch } from "./handle-similarity.ts";
+export { loadSeedWatchlist, seedWatchlist } from "./watchlist.ts";
+export {
   resolveChannelOrSupergroup,
   resolveById,
   resolveUserOrBot,
