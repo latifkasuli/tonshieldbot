@@ -33,9 +33,7 @@ export type ResolverResult =
     }
   | {
       readonly status: "not_resolvable";
-      readonly reason:
-        | "channel_or_supergroup_not_found"
-        | "user_or_bot_handle_requires_prior_context";
+      readonly reason: NotResolvableReason;
       /** Original Bot API description, if the error came from a server response. */
       readonly description: string | null;
     }
@@ -46,6 +44,30 @@ export type ResolverResult =
       readonly status: "failed";
       readonly failure: BotApiFailure;
     };
+
+/**
+ * Why an entity could not be resolved. Each reason maps to a different UX
+ * hint — the scanner uses the discriminator to decide what to tell the user.
+ *
+ *   - `channel_or_supergroup_not_found` — `getChat(@handle)` returned
+ *     "chat not found". The handle is either dead, never claimed, or a
+ *     private channel the bot can't see.
+ *   - `user_or_bot_handle_requires_prior_context` — Bot API doesn't
+ *     document cold user/bot @handle resolution. UX should prompt the
+ *     user to forward a message from the target instead.
+ *   - `resolved_not_channel_or_supergroup` — the handle resolved, but to
+ *     a different entity kind (group, private, etc.). The channel-path
+ *     scan can't act on it; the right path differs by kind.
+ *   - `entity_not_found_by_id` — `getChat(numeric_id)` returned
+ *     "chat not found". The ID is real (we observed it once) but Bot API
+ *     can't see it now — common when the entity was deleted, the bot
+ *     lost access, or the entity migrated and the old ID is dead.
+ */
+export type NotResolvableReason =
+  | "channel_or_supergroup_not_found"
+  | "user_or_bot_handle_requires_prior_context"
+  | "resolved_not_channel_or_supergroup"
+  | "entity_not_found_by_id";
 
 /**
  * Normalised view of a resolved entity. Carries enough to feed the
@@ -90,16 +112,16 @@ export const resolveChannelOrSupergroup = async (
     const chat = await client.raw.getChat(`@${normalised}`);
 
     if (chat.type !== "channel" && chat.type !== "supergroup") {
-      // The handle resolved but is a different entity type — likely a user
-      // or bot. Bot API doesn't formally support user/bot handle resolution,
-      // but in practice it sometimes succeeds. We treat this as
-      // not-resolvable for the channel/supergroup path so callers don't
-      // accidentally treat a user's profile as a channel.
-      return {
-        status: "not_resolvable",
-        reason: "user_or_bot_handle_requires_prior_context",
-        description: null,
-      };
+      // The handle resolved but to a different entity kind (private chat,
+      // group, etc.). Surface a specific reason so the scanner can tell
+      // the user "this is a user/bot, forward a message" vs "this is a
+      // group, scanning groups isn't supported" rather than a single
+      // generic message.
+      const reason: NotResolvableReason =
+        chat.type === "private"
+          ? "user_or_bot_handle_requires_prior_context"
+          : "resolved_not_channel_or_supergroup";
+      return { status: "not_resolvable", reason, description: null };
     }
 
     return { status: "ok", entity: toResolvedEntity(chat) };
@@ -124,12 +146,17 @@ export const resolveById = async (
 
   try {
     // grammY's `getChat` accepts `number | string`. Bot API IDs fit in 52
-    // bits so Number() is safe. If we ever extend past that, switch to the
-    // string form (`getChat("1234567890")`).
-    const chat = await client.raw.getChat(Number(id));
+    // significant bits so a JS `number` would also be safe (per
+    // <https://core.telegram.org/api/bots/ids>), but `String(id)` is the
+    // unconditionally-safe form and grammY happily accepts it.
+    const chat = await client.raw.getChat(String(id));
     return { status: "ok", entity: toResolvedEntity(chat) };
   } catch (error) {
-    return classifyResolverError(error, "user_or_bot_handle_requires_prior_context");
+    // ID-based path: we already had the numeric ID (from a forward or our
+    // snapshot store), so a not-resolvable response means the entity was
+    // deleted, banned, or the bot lost access — NOT that we need prior
+    // context. Use the more specific reason.
+    return classifyResolverError(error, "entity_not_found_by_id");
   }
 };
 
@@ -278,9 +305,7 @@ export const resolvedEntityFromUser = (user: User): ResolvedEntity => ({
 
 const classifyResolverError = (
   error: unknown,
-  notResolvableReason:
-    | "channel_or_supergroup_not_found"
-    | "user_or_bot_handle_requires_prior_context",
+  notResolvableReason: NotResolvableReason,
 ): ResolverResult => {
   const failure = classifyBotApiFailure(error);
 

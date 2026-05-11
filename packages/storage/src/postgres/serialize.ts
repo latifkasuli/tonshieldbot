@@ -52,6 +52,13 @@ export const deserializeInput = (raw: unknown): ScanInput => {
 
     case "telegram_deeplink": {
       const action = requireString(raw, "action");
+      const extrasRaw = raw.extras;
+      const extras: Record<string, string> = {};
+      if (extrasRaw !== undefined && extrasRaw !== null && isRecord(extrasRaw)) {
+        for (const [key, value] of Object.entries(extrasRaw)) {
+          if (typeof value === "string") extras[key] = value;
+        }
+      }
       // The discriminator on the saved record is verified by the outer
       // switch; we trust the stored shape here.
       return {
@@ -69,6 +76,7 @@ export const deserializeInput = (raw: unknown): ScanInput => {
         target: requireNullableString(raw, "target"),
         appShortName: requireNullableString(raw, "appShortName"),
         payload: requireNullableString(raw, "payload"),
+        extras,
       };
     }
 

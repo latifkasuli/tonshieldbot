@@ -39,9 +39,10 @@ const canonicalizeInput = (input: ScanInput): CanonicalInput => {
     case "telegram_deeplink":
       // Two deep links targeting the same bot+action+payload should hit the
       // same cache slot — but cache bypass for telegram_* kinds means this
-      // is informational. We canonicalise on (target, action, appShortName,
-      // payload) so even if the URL grammar varies (case, query order) the
-      // dedup key stays stable.
+      // is informational when intel is on. We canonicalise on
+      // (target, action, appShortName, payload, extras) so URLs that differ
+      // only in `extras` (e.g. `?mode=fullscreen`, `?admin=<perms>`,
+      // business-bot rights flags) don't collide.
       return {
         kind: input.kind,
         key: {
@@ -49,6 +50,7 @@ const canonicalizeInput = (input: ScanInput): CanonicalInput => {
           action: input.action,
           appShortName: input.appShortName ?? "",
           payload: input.payload ?? "",
+          extras: canonicalizeUnknown({ ...input.extras }),
         },
       };
 

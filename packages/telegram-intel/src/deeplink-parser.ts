@@ -60,7 +60,6 @@ export type ParsedTelegramUrl =
       /** UniqueGift slug after `t.me/nft/`. */
       readonly slug: string;
     }
-  | { readonly kind: "miniapp_indirect"; readonly hostBot: string | null }
   | { readonly kind: "plain_handle"; readonly handle: string }
   | { readonly kind: "not_telegram" }
   | { readonly kind: "not_deeplink" };
@@ -79,6 +78,33 @@ const DEEPLINK_QUERY_PARAMS: ReadonlySet<string> = new Set([
 ]);
 
 const VALID_USERNAME = /^[A-Za-z0-9_]{4,32}$/;
+
+/**
+ * Reserved first-segment prefixes that look like valid handles but are
+ * Telegram-internal paths, not entities. We reject them as not_deeplink so
+ * `basic-scan.ts` surfaces `TELEGRAM_INPUT_RECOGNISED_NOT_SCANNED` rather
+ * than trying to `getChat("@joinchat")` (which fails with 400 anyway, but
+ * silently and at the cost of a wasted Bot API call).
+ *
+ * Sources: <https://core.telegram.org/api/links> plus the legacy invite
+ * paths Telegram still serves for backwards compatibility.
+ */
+const RESERVED_HANDLE_PREFIXES: ReadonlySet<string> = new Set([
+  "joinchat", // legacy private-chat invite (e.g. t.me/joinchat/AAAAAAA)
+  "share", // share-to-Telegram intermediary
+  "iv", // instant view preview
+  "proxy", // socks5 proxy share
+  "addstickers", // sticker pack install
+  "addemoji", // custom emoji pack install
+  "addtheme", // theme install
+  "setlanguage", // localization pack install
+  "login", // login confirmation (web)
+  "c", // channel-by-numeric-id post link (t.me/c/<id>/<msgid>)
+  "bg", // chat background install
+  "msg", // share-message intermediary
+  "confirmphone", // phone confirmation flow
+  "contact", // QR-contact intermediary
+]);
 
 /**
  * Top-level entry: parse any URL we believe might be Telegram-shaped.
@@ -111,10 +137,14 @@ export const parseTelegramUrl = (url: URL): ParsedTelegramUrl => {
 
   const first = segments[0] ?? "";
 
-  // Special prefixes (proxy, addstickers, ...) are not deeplinks for our
-  // purposes. We deliberately allowlist plain handles below rather than
-  // denylisting every reserved prefix — a username starts with a letter
-  // and matches the username regex.
+  // Reserved Telegram-internal prefixes (joinchat, c, addstickers, ...)
+  // look like valid handles but aren't entities. Reject before username-
+  // regex check so `basic-scan.ts` surfaces TELEGRAM_INPUT_RECOGNISED_NOT_SCANNED
+  // rather than wasting a getChat call on a handle that's guaranteed to 404.
+  if (RESERVED_HANDLE_PREFIXES.has(first.toLowerCase())) {
+    return { kind: "not_deeplink" };
+  }
+
   if (!VALID_USERNAME.test(first)) {
     return { kind: "not_deeplink" };
   }
@@ -122,8 +152,14 @@ export const parseTelegramUrl = (url: URL): ParsedTelegramUrl => {
   const target = first.toLowerCase();
   const appShortName = segments.length >= 2 && segments[1] !== undefined ? segments[1] : null;
 
-  // Look for any of the deeplink-trigger query params. The first match wins
-  // because Telegram itself prioritises by URL grammar ordering.
+  // Look for any of the deeplink-trigger query params. The first match
+  // wins, in the iteration order of DEEPLINK_QUERY_PARAMS (start,
+  // startapp, startattach, startgroup, startchannel, startbusiness). This
+  // is deterministic but only an approximation of Telegram's own client
+  // behaviour for conflicting params — pathological links with two
+  // `start*` triggers may render slightly differently. We document this
+  // as a known limitation; in practice every t.me URL we've seen in the
+  // wild carries at most one.
   for (const param of DEEPLINK_QUERY_PARAMS) {
     if (url.searchParams.has(param)) {
       return buildDeeplink(url, param, target, appShortName);
@@ -162,9 +198,14 @@ const parseTgScheme = (url: URL): ParsedTelegramUrl => {
 
   if (action === "addbusinessbot") {
     const target = url.searchParams.get("bot")?.toLowerCase() ?? null;
+    const payload = url.searchParams.get("rights") ?? null;
+    // `rights` is the primary action payload; carry it on `payload` only.
+    // `bot` is the target; we already extracted it above. Everything else
+    // (campaign IDs, mode flags, etc.) goes in extras so the cache key
+    // captures it but the primary fields stay focused.
     const extras: Record<string, string> = {};
     for (const [key, value] of url.searchParams) {
-      if (key === "bot") continue;
+      if (key === "bot" || key === "rights") continue;
       extras[key] = value;
     }
     return {
@@ -172,7 +213,7 @@ const parseTgScheme = (url: URL): ParsedTelegramUrl => {
       action: "addBusinessBot",
       target,
       appShortName: null,
-      payload: url.searchParams.get("rights") ?? null,
+      payload,
       extras,
     };
   }

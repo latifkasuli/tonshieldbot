@@ -3,7 +3,12 @@ import { parseTelegramUrl } from "@tonshield/telegram-intel";
 import { parseTonConnectLink } from "./ton-connect.ts";
 import { parseUrl } from "./utils.ts";
 
-const telegramHandlePattern = /^@[A-Za-z0-9_]{5,32}$/;
+// 4 chars is the Fragment collectible minimum (e.g. `@durov` is 5 but
+// `@ton` would be a 3-char Fragment hold-out — Telegram itself rejects
+// 3-char registration since 2023). Aligned with the deeplink-parser's
+// path-segment validator so a handle is classifiable identically whether
+// it arrives bare or inside a t.me URL.
+const telegramHandlePattern = /^@[A-Za-z0-9_]{4,32}$/;
 const rawTonAddressPattern = /^-?\d+:[a-fA-F0-9]{64}$/;
 const friendlyTonAddressPattern = /^(?:EQ|UQ|kQ|0Q)[A-Za-z0-9_-]{46}$/;
 const likelyBocPattern = /^te6[A-Za-z0-9+/=_-]{20,}$/;
@@ -45,11 +50,15 @@ export const classifyInput = (rawInput: string): ScanInput => {
   }
 
   if (telegramHandlePattern.test(trimmed)) {
+    // Lowercase the canonical handle field too — Telegram usernames are
+    // case-insensitive at the API layer, and downstream `canonicalInputHash`
+    // already lowercases for dedup. Keeping `handle` raw-case would make
+    // consumers disagree with the hash key in subtle ways.
     return {
       kind: "telegram_handle",
       raw: rawInput,
       normalized: trimmed.toLowerCase(),
-      handle: `@${trimmed.slice(1)}`,
+      handle: `@${trimmed.slice(1).toLowerCase()}`,
     };
   }
 
@@ -102,6 +111,7 @@ const classifyUrl = (rawInput: string, url: URL): ScanInput => {
       target: parsedTg.target,
       appShortName: parsedTg.appShortName,
       payload: parsedTg.payload,
+      extras: parsedTg.extras,
     };
   }
 

@@ -349,6 +349,17 @@ export const coreRules = [
       "Verify the entity's current identity through an official source before trusting it. Pay particular attention to whether the previous handle matched a well-known project.",
     defaultScoreDelta: 25,
   },
+  {
+    id: "TELEGRAM_INPUT_RECOGNISED_NOT_SCANNED",
+    category: "telegram",
+    severity: "info",
+    title: "Telegram input recognised but full scanning not yet implemented",
+    description:
+      "TON Shield identified this input as a Telegram-shaped link (e.g. Mini App URL, t.me/nft/* gift, invite link, channel-id deep link), but the scanner for this specific input kind has not landed yet. The classifier did its work; the deeper checks (gift catalog cross-reference, Mini App content fetch, etc.) are queued in later M3 PRs. Evidence carries the input kind plus a `reason` discriminator explaining why no findings were produced.",
+    recommendation:
+      "Treat as if no risk signal is available for this link yet. For TON-NFT collectibles, verify ownership at fragment.com directly until M3 PR-6 ships the gift catalog. For Mini App URLs, treat the dApp with the usual scepticism until M3 PR-5 ships content scanning.",
+    defaultScoreDelta: 5,
+  },
 ] as const satisfies readonly RuleDefinition[];
 
 export type CoreRuleId = (typeof coreRules)[number]["id"];
