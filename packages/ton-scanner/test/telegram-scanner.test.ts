@@ -565,9 +565,11 @@ describe("scanTelegramEntity — display name homoglyph", () => {
       (f) => f.ruleId === "TELEGRAM_DISPLAY_NAME_HOMOGLYPH",
     );
     expect(homoglyphFindings).toHaveLength(1);
-    // The match is loose ('Binancce' has DL=1 to 'binance', stronger than
-    // 'Official Тоnkeeper support channel' which has high distance to
-    // 'tonkeeper' due to length difference). The exact branch tested here
-    // just asserts ONE finding is produced.
+    expect(homoglyphFindings[0]?.evidence).toMatchObject({
+      field: "bio",
+      matchedBrand: "Tonkeeper",
+      matchedKey: "tonkeeper_support",
+      strength: "exact",
+    });
   });
 });

@@ -5,9 +5,11 @@ import {
   jaro,
   jaroWinkler,
   matchAgainstWatchlist,
+  matchTextAgainstWatchlist,
   normalize,
   type BrandWatchlistEntry,
 } from "../src/handle-similarity.ts";
+import { seedWatchlist } from "../src/watchlist.ts";
 
 // ── normalize ─────────────────────────────────────────────────────────────
 
@@ -48,6 +50,30 @@ describe("normalize", () => {
     // Fullwidth forms of Latin letters: U+FF34 (T), U+FF4F (o), etc.
     const fullwidth = "Ｔｏｎｋｅｅｐｅｒ";
     expect(normalize(fullwidth)).toBe("tonkeeper");
+  });
+
+  it("strips SOFT HYPHEN (U+00AD) — a Format-class char outside the zero-width cluster", () => {
+    // SOFT HYPHEN is in Unicode category Cf, not the narrow zero-width
+    // set. The original ZW-only list missed it. The \p{Cf} replacement
+    // catches it. Regression for PR-3 review M1.
+    const withSoftHyphen = "ton\u00ADkeeper";
+    expect(normalize(withSoftHyphen)).toBe("tonkeeper");
+  });
+
+  it("strips bidi controls (LRM, RLM, ALM) — Trojan-Source-style evasion", () => {
+    // U+200E LRM, U+200F RLM, U+061C ALM. All Cf-category, all invisible,
+    // all usable to visually rearrange a string while keeping the bytes
+    // looking benign. Regression for PR-3 review M1.
+    const withBidi = "t\u200Eo\u200Fn\u061Ckeeper";
+    expect(normalize(withBidi)).toBe("tonkeeper");
+  });
+
+  it("strips bidi isolates and embedding markers (U+202A–U+202E, U+2066–U+2069)", () => {
+    // The Trojan-Source attack family (CVE-2021-42574) abuses these to
+    // visually reorder identifier characters. We strip the entire Cf
+    // category, so all of them go.
+    const withIsolates = "ton\u2066\u202Akeeper\u202C\u2069";
+    expect(normalize(withIsolates)).toBe("tonkeeper");
   });
 
   it("treats empty input as empty", () => {
@@ -181,31 +207,26 @@ describe("matchAgainstWatchlist", () => {
     expect(result?.distance).toBe(1);
   });
 
-  it("returns 'similar' for distance==2 against a sufficiently long brand key with strong prefix", () => {
-    // Construct a deterministic distance-2 example against the longer
-    // "tonkeeper_support" key (17 chars). Two adjacent substitutions late
-    // in the string keep the leading prefix intact for a high Jaro-Winkler.
-    const result = matchAgainstWatchlist("tonkeeper_suppxx", fixtureWatchlist);
-    // distance from "tonkeeper_suppxx" to "tonkeeper_support":
-    //   delete 'x','x', insert 'o','r','t' → 5 ops? Let's just assert
-    //   matchAgainstWatchlist returns SOME match (not null) and the
-    //   branch we care about — distance and similarity — gets pinned by
-    //   the damerauLevenshtein / jaroWinkler tests above.
-    // The matcher should EITHER produce a similar/near match, or null.
-    // We don't pin a specific strength tier here because it depends on
-    // exact distance arithmetic which is unit-tested elsewhere.
-    if (result !== null) {
-      expect(["near", "similar", "loose", "exact"]).toContain(result.strength);
-    }
+  it("returns 'similar' for a deterministic distance-2 pair with strong prefix overlap", () => {
+    // Construct a candidate that we PIN to DL=2 and JW≥0.92 via the
+    // primitives first, then assert the matcher grades it as `similar`.
+    // Without the explicit primitive pins, the grading depends on exact
+    // distance arithmetic and the test could pass for the wrong reason.
+    const matchKey = "tonkeeperofficial";
+    const candidate = "tonkeeperoffizzal";
+
+    expect(damerauLevenshtein(candidate, matchKey)).toBe(2);
+    expect(jaroWinkler(candidate, matchKey)).toBeGreaterThanOrEqual(0.92);
+
+    const result = matchAgainstWatchlist(candidate, fixtureWatchlist);
+    expect(result?.strength).toBe("similar");
+    expect(result?.distance).toBe(2);
+    expect(result?.similarity).toBeGreaterThanOrEqual(0.92);
   });
 
-  it("the 'similar' tier fires when distance is 2 AND jaroWinkler ≥ 0.92 (direct verification)", () => {
-    // Direct primitive test: verify the matcher's grading logic with a
-    // known-distance pair. "binance" → "binnance" has DL=1 (insertion),
-    // so we'd hit 'near' not 'similar'. We rely on the unit tests of
-    // `damerauLevenshtein` and `jaroWinkler` above to pin the math, and
-    // on the integration in `matchAgainstWatchlist` to pin the grading
-    // table.
+  it("returns 'near' for a single-typo Binance match (direct grading verification)", () => {
+    // "Binnance" is DL=1 (insertion of 'n') from "binance" — should
+    // grade as `near`, not `similar`.
     const result = matchAgainstWatchlist("Binnance", fixtureWatchlist);
     expect(result?.strength).toBe("near");
     expect(result?.brand.brand).toBe("Binance");
@@ -243,6 +264,43 @@ describe("matchAgainstWatchlist", () => {
     const result = matchAgainstWatchlist("tonkeeperofficial", fixtureWatchlist);
     expect(result?.strength).toBe("exact");
     expect(result?.matchedKey).toBe("tonkeeperofficial");
+  });
+
+  it("matches documented seed impersonators that do not look like simple typos", () => {
+    expect(matchAgainstWatchlist("FragmentOffersRoBot", seedWatchlist)).toMatchObject({
+      brand: { brand: "Fragment" },
+      strength: "exact",
+    });
+    expect(matchAgainstWatchlist("CBSupportchat", seedWatchlist)).toMatchObject({
+      brand: { brand: "Coinbase" },
+      strength: "exact",
+    });
+  });
+});
+
+describe("matchTextAgainstWatchlist", () => {
+  it("matches brand lures embedded inside longer display/bio text", () => {
+    const result = matchTextAgainstWatchlist(
+      "Official Тоnkeeper support channel",
+      fixtureWatchlist,
+    );
+
+    expect(result?.strength).toBe("exact");
+    expect(result?.brand.brand).toBe("Tonkeeper");
+    expect(result?.matchedKey).toBe("tonkeeper_support");
+  });
+
+  it("avoids generic single-token matches inside long text", () => {
+    const walletWatchlist: readonly BrandWatchlistEntry[] = [
+      {
+        brand: "Wallet",
+        category: "wallet",
+        matchKeys: ["wallet"],
+        legitimateHandles: ["wallet"],
+      },
+    ];
+
+    expect(matchTextAgainstWatchlist("crypto wallet reviews", walletWatchlist)).toBeNull();
   });
 });
 

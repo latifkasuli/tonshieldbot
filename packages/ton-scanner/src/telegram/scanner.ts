@@ -4,6 +4,7 @@ import {
   classifyBotApiFailure,
   isFiringStrength,
   matchAgainstWatchlist,
+  matchTextAgainstWatchlist,
   resolveById,
   resolveChannelOrSupergroup,
   resolveUserOrBot,
@@ -354,7 +355,7 @@ const checkResolvedEntity = (
     // even if the display name happens to be the brand verbatim.
     const candidateHandleArg =
       entity.username !== null && entity.username.length > 0 ? entity.username : undefined;
-    const match = matchAgainstWatchlist(candidate.value, watchlist, {
+    const match = matchTextAgainstWatchlist(candidate.value, watchlist, {
       ...(candidateHandleArg === undefined ? {} : { candidateHandle: candidateHandleArg }),
     });
     if (match === null || !isFiringStrength(match)) continue;

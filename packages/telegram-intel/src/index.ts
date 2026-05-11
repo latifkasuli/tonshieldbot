@@ -12,6 +12,7 @@ export {
   jaro,
   jaroWinkler,
   matchAgainstWatchlist,
+  matchTextAgainstWatchlist,
   normalize,
 } from "./handle-similarity.ts";
 export type { BrandWatchlistEntry, MatchStrength, WatchlistMatch } from "./handle-similarity.ts";

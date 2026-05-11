@@ -22,11 +22,36 @@ import seedRaw from "../data/watchlist-seed.json" with { type: "json" };
  * and strict on the fields the matcher consumes.
  */
 
+/**
+ * Normalise a handle-shaped string at seed-load time. Mirrors the
+ * matcher's runtime treatment so seed entries compare cleanly:
+ *
+ *   - trim surrounding whitespace
+ *   - strip a leading `@` (Telegram handles are stored bare in the
+ *     matcher's `legitimateHandles` lookup; both forms should converge)
+ *   - lowercase (handles are case-insensitive on the Bot API side)
+ *
+ * Applied to BOTH `matchKeys` and `legitimateHandles` so a stray `@`,
+ * trailing space, or capitalisation drift in the seed file can't cause
+ * the runtime suppression check to false-positive on a legitimate handle.
+ */
+const normaliseHandleShape = (raw: string): string => raw.trim().replace(/^@/, "").toLowerCase();
+
+const handleShapeSchema = z
+  .string()
+  .min(1, "watchlist entry handle must be non-empty")
+  .transform(normaliseHandleShape)
+  // After transform, re-validate that we didn't strip our way to empty
+  // (e.g. an entry like `"@"` would survive `.min(1)` above).
+  .refine((s) => s.length > 0, {
+    message: "watchlist entry handle must be non-empty after trim/@-strip",
+  });
+
 const entrySchema = z.object({
-  brand: z.string().min(1),
+  brand: z.string().trim().min(1),
   category: z.enum(["wallet", "exchange", "mini_app_platform", "infra", "marketplace", "other"]),
-  matchKeys: z.array(z.string().min(1)).min(1),
-  legitimateHandles: z.array(z.string()).default([]),
+  matchKeys: z.array(handleShapeSchema).min(1),
+  legitimateHandles: z.array(handleShapeSchema).default([]),
   notes: z.string().optional(),
 });
 

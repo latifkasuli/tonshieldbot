@@ -29,38 +29,54 @@ import { rectifyConfusion } from "unicode-confusables";
 // ── normalisation ──────────────────────────────────────────────────────────
 
 /**
- * Zero-width Unicode characters that visually disappear. Strip BEFORE
- * skeletoning. Built via escape sequences so the literal source stays
- * free of irregular whitespace:
+ * Strip every Unicode `Format` (Cf) character. This is broader than the
+ * narrow zero-width cluster (ZWSP/ZWNJ/ZWJ/BOM/WJ/MVS) — it ALSO covers
+ * SOFT HYPHEN (U+00AD), the bidi cluster (LRM/RLM/ALM, LRE/RLE/PDF, LRO/
+ * RLO, LRI/RLI/FSI/PDI, U+202A–U+202E, U+2066–U+2069), and miscellaneous
+ * formatting controls — i.e. every codepoint that is invisible-by-design
+ * and cannot legitimately appear inside a Telegram handle or display
+ * name. Bidi controls in particular enable "Trojan Source"-style attacks
+ * that visually reorder a string without changing the underlying bytes.
  *
- *   U+200B ZERO WIDTH SPACE
- *   U+200C ZERO WIDTH NON-JOINER
- *   U+200D ZERO WIDTH JOINER
- *   U+FEFF ZERO WIDTH NO-BREAK SPACE (BOM)
- *   U+2060 WORD JOINER
- *   U+180E MONGOLIAN VOWEL SEPARATOR
+ * Using `\p{Cf}` directly (rather than a hand-curated denylist) means
+ * future Unicode revisions inherit coverage without code changes.
+ * Constructed via `new RegExp` to keep the source free of irregular
+ * whitespace; `\p{...}` requires the `u` flag.
  */
-// Use alternation, not a character class, so the ZWJ U+200D doesn't trip
-// eslint's `no-misleading-character-class` rule. The regex engine accepts
-// the U+2060/U+180E codepoints either way.
-const ZERO_WIDTH_CHARS = new RegExp("\u200B|\u200C|\u200D|\uFEFF|\u2060|\u180E", "g");
+const INVISIBLE_FORMAT_CHARS = new RegExp("\\p{Cf}", "gu");
 
 /**
- * Compute the TR39 confusables skeleton of an input string. Two strings
- * with the same skeleton are visually indistinguishable. Output is
- * lowercased and stripped of zero-width chars.
+ * Compute the visual skeleton of an input string for impersonation
+ * comparisons. Pipeline:
+ *
+ *   1. NFKC normalisation — collapses presentation forms (fullwidth
+ *      Latin → ASCII), composes/decomposes per Unicode TR15.
+ *   2. Strip all Unicode Format (Cf) characters — invisible glyphs
+ *      scammers sprinkle to defeat exact-string matchers.
+ *   3. Confusables pass via `unicode-confusables.rectifyConfusion` —
+ *      Cyrillic а→Latin a, Greek ο→o, Cherokee ꮯ→Latin C, etc.
+ *   4. `toLowerCase()` for case-insensitive comparison.
+ *
+ * **Caveat on UTS #39:** `unicode-confusables` is a practical
+ * confusables-map implementation, not a certified Unicode TR39
+ * identifier-skeleton (which formally specifies NFKD + Default-Ignorable
+ * stripping + a different decomposition order). For brand-name
+ * impersonation the practical map is sufficient — but two strings that
+ * compare equal under our `normalize` may not be equal under a reference
+ * TR39 implementation, and vice versa, in rare edge cases. Documented
+ * here so a future spec-compliance upgrade is a deliberate decision,
+ * not silent drift via dependency bumps.
+ *
+ * **Caveat on casefold:** `String.prototype.toLowerCase()` is an
+ * approximation of Unicode case folding (`toCasefold` is not in the JS
+ * standard library). For our predominantly Latin/Cyrillic/Greek inputs
+ * the approximation is adequate; for Turkish dotted/dotless I and other
+ * locale-sensitive cases it can diverge. We deliberately do NOT use
+ * `.toLocaleLowerCase()` so the function stays deterministic regardless
+ * of operator locale.
  */
 export const normalize = (input: string): string => {
-  // 1. NFKC: composes/decomposes per Unicode Normalization Form KC.
-  //    Collapses presentation forms (e.g. fullwidth Latin → ASCII).
-  // 2. Strip zero-width joiners/non-joiners/space/BOM/word-joiner/MVS —
-  //    invisible glyphs scammers sprinkle to defeat exact-string matchers.
-  // 3. TR39 skeleton — Cyrillic а→Latin a, Greek ο→o, etc.
-  // 4. Casefold via `toLowerCase()`. For our handle/display-name inputs
-  //    (predominantly Latin/Cyrillic/Greek), this is equivalent to a full
-  //    casefold; we don't ship `.toLocaleLowerCase("en")` to keep the
-  //    function deterministic regardless of operator locale.
-  const stripped = input.normalize("NFKC").replace(ZERO_WIDTH_CHARS, "");
+  const stripped = input.normalize("NFKC").replace(INVISIBLE_FORMAT_CHARS, "");
   return rectifyConfusion(stripped).toLowerCase();
 };
 
@@ -231,16 +247,24 @@ export const matchAgainstWatchlist = (
 
   let best: WatchlistMatch | null = null;
 
+  // Pre-normalise the candidate handle for the suppression check ONCE per
+  // call rather than re-normalising inside the inner `some()`. We strip a
+  // leading `@`, trim whitespace, and lowercase — the same shape the seed
+  // loader's `handleShapeSchema` enforces on `legitimateHandles` entries,
+  // so the equality comparison stays symmetric even if someone manages to
+  // pass a stray `"@TonKeeper "` from the bot's update handler.
+  const candidateHandleNorm = canonicaliseHandle(options.candidateHandle);
+
   for (const brand of watchlist) {
     // Skip if candidate handle is on the brand's legitimate list — that's
-    // the real account, not impersonation. We compare lower-case raw
-    // handle (without the leading @) to avoid skeleton-stripping the
-    // legitimate handle (which might collide with itself).
+    // the real account, not impersonation. Symmetric normalisation on
+    // both sides: trim + @-strip + lowercase. Both the seed schema and
+    // this code apply the same transform, so a malformed JSON entry like
+    // `"@tonkeeper"` (with a stray `@`) still matches `tonkeeper` from
+    // the candidate side.
     if (
-      options.candidateHandle !== undefined &&
-      brand.legitimateHandles.some(
-        (h) => h.toLowerCase() === options.candidateHandle?.toLowerCase().replace(/^@/, ""),
-      )
+      candidateHandleNorm !== null &&
+      brand.legitimateHandles.some((h) => canonicaliseHandle(h) === candidateHandleNorm)
     ) {
       continue;
     }
@@ -280,6 +304,38 @@ export const matchAgainstWatchlist = (
   return best;
 };
 
+/**
+ * Match a Unicode-rich display field (`displayName`, `bio`) against the
+ * watchlist. Unlike handles, these fields are often phrases ("Official
+ * Tonkeeper support channel"), so whole-string matching alone misses the
+ * actual brand lure. We compare the full string plus conservative contiguous
+ * token fragments:
+ *
+ *   - joined token windows of length 2..4 (`trust wallet` → `trustwallet`,
+ *     `trust_wallet`)
+ *   - single-token fragments only when the token is long enough (>=7 chars),
+ *     avoiding noisy matches on generic words like "wallet" in long bios
+ *
+ * This keeps handle matching strict while letting display/bio fields catch
+ * the scam copy users actually see in Telegram clients.
+ */
+export const matchTextAgainstWatchlist = (
+  candidate: string,
+  watchlist: readonly BrandWatchlistEntry[],
+  options: { readonly candidateHandle?: string } = {},
+): WatchlistMatch | null => {
+  let best: WatchlistMatch | null = null;
+
+  for (const fragment of textFragments(candidate)) {
+    const match = matchAgainstWatchlist(fragment, watchlist, options);
+    if (match !== null && (best === null || isStronger(match, best))) {
+      best = match;
+    }
+  }
+
+  return best;
+};
+
 const STRENGTH_ORDER: readonly MatchStrength[] = ["loose", "similar", "near", "exact"];
 
 const gradeMatch = (
@@ -299,7 +355,50 @@ const isStronger = (a: WatchlistMatch, b: WatchlistMatch): boolean => {
   const bRank = STRENGTH_ORDER.indexOf(b.strength);
   if (aRank !== bRank) return aRank > bRank;
   if (a.distance !== b.distance) return a.distance < b.distance;
-  return a.similarity > b.similarity;
+  if (a.similarity !== b.similarity) return a.similarity > b.similarity;
+  return a.matchedKey.length > b.matchedKey.length;
+};
+
+const textFragments = (candidate: string): readonly string[] => {
+  const skeleton = normalize(candidate).trim();
+  if (skeleton.length === 0) return [];
+
+  const fragments = new Set<string>([skeleton]);
+  const tokens = skeleton.split(/[^\p{Letter}\p{Number}]+/u).filter((token) => token.length > 0);
+
+  if (tokens.length === 1) {
+    return Array.from(fragments);
+  }
+
+  for (let start = 0; start < tokens.length; start += 1) {
+    const first = tokens[start];
+    if (first !== undefined && first.length >= 7) {
+      fragments.add(first);
+    }
+
+    const maxEnd = Math.min(tokens.length, start + 4);
+    for (let end = start + 2; end <= maxEnd; end += 1) {
+      const window = tokens.slice(start, end);
+      fragments.add(window.join(""));
+      fragments.add(window.join("_"));
+    }
+  }
+
+  return Array.from(fragments);
+};
+
+/**
+ * Canonicalise a candidate handle for the legitimate-handle suppression
+ * check: trim whitespace, strip a leading `@`, lowercase. Symmetric with
+ * `watchlist.ts`'s `normaliseHandleShape` so seed entries and runtime
+ * candidates compare under the same shape. Returns `null` for undefined
+ * input (lets the caller short-circuit cleanly) or for the empty string
+ * after canonicalisation.
+ */
+const canonicaliseHandle = (raw: string | undefined): string | null => {
+  if (raw === undefined) return null;
+  const cleaned = raw.trim().replace(/^@/, "").toLowerCase();
+  return cleaned.length === 0 ? null : cleaned;
 };
 
 /**

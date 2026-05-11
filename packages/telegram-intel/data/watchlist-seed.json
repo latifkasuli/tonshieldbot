@@ -36,7 +36,9 @@
       "fragmentcom",
       "fragment_com",
       "fragmentofficial",
-      "fragment_official"
+      "fragment_official",
+      "fragmentoffersrobot",
+      "fragment_offers_robot"
     ],
     "legitimateHandles": [],
     "notes": "Fragment (fragment.com) is the TON username and gift marketplace. Fragment does NOT have a Telegram support bot — all support is via the website. p05h documented the 'FragmentOffersRoBot' (capital B) impersonation."
@@ -66,7 +68,9 @@
       "coinbase_official",
       "coinbaseofficial",
       "coinbasehelp",
-      "coinbase_help"
+      "coinbase_help",
+      "cbsupportchat",
+      "cb_support_chat"
     ],
     "legitimateHandles": [],
     "notes": "Coinbase explicitly states it has no Telegram support presence (Coinbase security blog: 'Anatomy of a Telegram Scam'). Named impersonator handles include @Leocrypto22 and @CBSupportchat."
