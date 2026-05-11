@@ -32,9 +32,25 @@ import type { ScanInput } from "@tonshield/shared";
  */
 export const isScanResultCacheable = (
   input: ScanInput,
-  options: { readonly emulatorEnabled: boolean },
+  options: { readonly emulatorEnabled: boolean; readonly telegramIntelEnabled?: boolean },
 ): boolean => {
   if ((input.kind === "transaction_json" || input.kind === "boc") && options.emulatorEnabled) {
+    return false;
+  }
+
+  // M3 PR-2: when Telegram intel is enabled, Telegram-shaped scans
+  // bypass the report cache. Bot API state (handles, gift inventories,
+  // member counts) is live, and pre-token-rollout cached
+  // `TELEGRAM_BOT_API_NOT_CONFIGURED` findings would otherwise stick
+  // around after operators set the token.
+  if (
+    options.telegramIntelEnabled === true &&
+    (input.kind === "telegram_handle" ||
+      input.kind === "telegram_url" ||
+      input.kind === "telegram_deeplink" ||
+      input.kind === "telegram_miniapp_url" ||
+      input.kind === "telegram_nft_link")
+  ) {
     return false;
   }
 

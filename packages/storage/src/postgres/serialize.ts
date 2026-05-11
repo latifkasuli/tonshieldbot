@@ -50,6 +50,44 @@ export const deserializeInput = (raw: unknown): ScanInput => {
         handle: requireNullableString(raw, "handle"),
       };
 
+    case "telegram_deeplink": {
+      const action = requireString(raw, "action");
+      // The discriminator on the saved record is verified by the outer
+      // switch; we trust the stored shape here.
+      return {
+        ...base,
+        kind: "telegram_deeplink",
+        url: requireUrl(raw, "url"),
+        action: action as
+          | "start"
+          | "startapp"
+          | "startattach"
+          | "startgroup"
+          | "startchannel"
+          | "startbusiness"
+          | "addBusinessBot",
+        target: requireNullableString(raw, "target"),
+        appShortName: requireNullableString(raw, "appShortName"),
+        payload: requireNullableString(raw, "payload"),
+      };
+    }
+
+    case "telegram_miniapp_url":
+      return {
+        ...base,
+        kind: "telegram_miniapp_url",
+        url: requireUrl(raw, "url"),
+        hostBot: requireNullableString(raw, "hostBot"),
+      };
+
+    case "telegram_nft_link":
+      return {
+        ...base,
+        kind: "telegram_nft_link",
+        url: requireUrl(raw, "url"),
+        slug: requireString(raw, "slug"),
+      };
+
     case "tonconnect_link":
       return {
         ...base,

@@ -48,6 +48,7 @@ bot.on("message:text", async (ctx) => {
   // see `isScanResultCacheable` for the full rationale.
   const cacheable = isScanResultCacheable(classified, {
     emulatorEnabled: deps.emulator.enabled,
+    telegramIntelEnabled: deps.telegramIntel.enabled,
   });
   const cached = cacheable ? await deps.storage.reports.findByInputHash(inputHash) : null;
 
@@ -63,6 +64,8 @@ bot.on("message:text", async (ctx) => {
     const fresh = await createBasicScan({
       cache: manifestCache,
       emulator: deps.emulator,
+      telegramIntel: deps.telegramIntel,
+      telegramEntities: deps.storage.telegramEntities,
       rawInput,
     });
     // `ReportStore.save()` is dedup-aware and returns the existing row on

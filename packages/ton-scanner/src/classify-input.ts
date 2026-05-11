@@ -1,4 +1,5 @@
 import type { ScanInput } from "@tonshield/shared";
+import { parseTelegramUrl } from "@tonshield/telegram-intel";
 import { parseTonConnectLink } from "./ton-connect.ts";
 import { parseUrl } from "./utils.ts";
 
@@ -85,15 +86,56 @@ export const classifyInput = (rawInput: string): ScanInput => {
 };
 
 const classifyUrl = (rawInput: string, url: URL): ScanInput => {
-  if (url.hostname === "t.me" || url.hostname === "telegram.me") {
-    const handle = url.pathname.split("/").find((segment) => segment.length > 0) ?? null;
+  // Telegram URLs go through the deep-link parser first so we can
+  // distinguish action-bearing links (`start*`, `nft`, addBusinessBot) from
+  // plain handle references. Plain references degrade to `telegram_url`
+  // for back-compat with the M1 manifest scanner.
+  const parsedTg = parseTelegramUrl(url);
 
+  if (parsedTg.kind === "deeplink") {
+    return {
+      kind: "telegram_deeplink",
+      raw: rawInput,
+      normalized: url.toString(),
+      url,
+      action: parsedTg.action,
+      target: parsedTg.target,
+      appShortName: parsedTg.appShortName,
+      payload: parsedTg.payload,
+    };
+  }
+
+  if (parsedTg.kind === "nft") {
+    return {
+      kind: "telegram_nft_link",
+      raw: rawInput,
+      normalized: url.toString(),
+      url,
+      slug: parsedTg.slug,
+    };
+  }
+
+  if (parsedTg.kind === "plain_handle") {
     return {
       kind: "telegram_url",
       raw: rawInput,
       normalized: url.toString(),
       url,
-      handle,
+      handle: parsedTg.handle,
+    };
+  }
+
+  // `not_deeplink` for Telegram hosts (e.g. malformed t.me URL) — still
+  // surface as telegram_url with no handle so the existing M1 scanner
+  // can degrade gracefully. Treat `not_telegram` as the trigger to fall
+  // through to the manifest / generic URL classifier below.
+  if (parsedTg.kind === "not_deeplink") {
+    return {
+      kind: "telegram_url",
+      raw: rawInput,
+      normalized: url.toString(),
+      url,
+      handle: null,
     };
   }
 

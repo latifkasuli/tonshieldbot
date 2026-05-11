@@ -1,15 +1,18 @@
 import {
   createInMemoryApiKeyStore,
   createInMemoryReportStore,
+  createInMemoryTelegramEntityStore,
   createInMemoryTenantStore,
 } from "./memory/index.ts";
 import type { ApiKeyStore } from "./interfaces/api-key-store.ts";
 import type { ReportStore } from "./interfaces/report-store.ts";
+import type { TelegramEntityStore } from "./interfaces/telegram-entity-store.ts";
 import type { TenantStore } from "./interfaces/tenant-store.ts";
 import {
   createPostgresApiKeyStore,
   createPostgresClient,
   createPostgresReportStore,
+  createPostgresTelegramEntityStore,
   createPostgresTenantStore,
 } from "./postgres/index.ts";
 import type { PostgresClient } from "./postgres/index.ts";
@@ -18,6 +21,8 @@ export interface Storage {
   readonly reports: ReportStore;
   readonly apiKeys: ApiKeyStore;
   readonly tenants: TenantStore;
+  /** Telegram entity snapshot store — see m3-design.md §4. Added in M3 PR-2. */
+  readonly telegramEntities: TelegramEntityStore;
   /**
    * Releases any underlying resources (e.g. the Postgres pool). Memory
    * storage's close is a no-op. Call on app shutdown.
@@ -53,6 +58,7 @@ export const createStorage = (config: StorageConfig = {}): Storage => {
     reports: createInMemoryReportStore(),
     apiKeys: createInMemoryApiKeyStore(),
     tenants: createInMemoryTenantStore(),
+    telegramEntities: createInMemoryTelegramEntityStore(),
     close: () => Promise.resolve(),
   };
 };
@@ -66,6 +72,7 @@ const createPostgresStorage = (databaseUrl: string, poolMax: number | undefined)
     reports: createPostgresReportStore(client.db),
     apiKeys: createPostgresApiKeyStore(client.db),
     tenants: createPostgresTenantStore(client.db),
+    telegramEntities: createPostgresTelegramEntityStore(client.db),
     close: client.close,
   };
 };
