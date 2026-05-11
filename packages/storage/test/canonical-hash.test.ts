@@ -3,6 +3,7 @@ import type {
   BocInput,
   GenericUrlInput,
   ManifestUrlInput,
+  TelegramDeeplinkInput,
   TelegramHandleInput,
   TelegramUrlInput,
   TonAddressInput,
@@ -96,6 +97,23 @@ describe("canonicalInputHash", () => {
     const lower: TelegramHandleInput = { ...upper, handle: "@tonshield" };
 
     expect(canonicalInputHash(upper)).toBe(canonicalInputHash(lower));
+  });
+
+  it("does not dedupe Telegram deeplinks that differ only in extras", () => {
+    const base: TelegramDeeplinkInput = {
+      kind: "telegram_deeplink",
+      raw: "https://t.me/somebot?startapp=foo&mode=fullscreen",
+      normalized: "https://t.me/somebot?startapp=foo&mode=fullscreen",
+      url: new URL("https://t.me/somebot?startapp=foo&mode=fullscreen"),
+      action: "startapp",
+      target: "somebot",
+      appShortName: null,
+      payload: "foo",
+      extras: { mode: "fullscreen" },
+    };
+    const compact = { ...base, extras: { mode: "compact" } };
+
+    expect(canonicalInputHash(base)).not.toBe(canonicalInputHash(compact));
   });
 
   it("dedupes transaction JSON regardless of key ordering", () => {
