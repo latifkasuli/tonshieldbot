@@ -15,6 +15,13 @@
       "when": 1778454680474,
       "tag": "0001_telegram_intel_snapshots",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1778618863184,
+      "tag": "0002_telegram_gift_catalog",
+      "breakpoints": true
     }
   ]
 }

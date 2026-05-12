@@ -141,3 +141,33 @@ export const telegramUsernameBindings = pgTable(
     index("telegram_username_bindings_entity_idx").on(table.entityId),
   ],
 );
+
+// ── M3 PR-7: gift catalog cache ────────────────────────────────────────────
+//
+// Cache of `getAvailableGifts` results. Keyed by Bot API `Gift.id` (opaque
+// string). Publisher-chat columns are denormalised from the inline `Chat`
+// object so PR-8's owned-gift inventory rule can answer "did a known
+// publisher issue this gift?" without joining `telegram_entities`.
+
+export const telegramGiftCatalog = pgTable(
+  "telegram_gift_catalog",
+  {
+    giftId: text("gift_id").primaryKey(),
+    publisherChatId: bigint("publisher_chat_id", { mode: "bigint" }),
+    publisherChatUsername: text("publisher_chat_username"),
+    publisherChatTitle: text("publisher_chat_title"),
+    publisherChatType: text("publisher_chat_type"),
+    starCount: integer("star_count").notNull(),
+    upgradeStarCount: integer("upgrade_star_count"),
+    totalCount: integer("total_count"),
+    remainingCount: integer("remaining_count"),
+    stickerFileUniqueId: text("sticker_file_unique_id"),
+    firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).notNull(),
+    lastRefreshedAt: timestamp("last_refreshed_at", { withTimezone: true }).notNull(),
+    raw: jsonb("raw"),
+  },
+  (table) => [
+    index("telegram_gift_catalog_publisher_chat_idx").on(table.publisherChatId),
+    index("telegram_gift_catalog_last_refreshed_idx").on(table.lastRefreshedAt),
+  ],
+);

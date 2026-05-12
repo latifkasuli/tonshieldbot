@@ -19,3 +19,8 @@ export type {
   TelegramEntityStore,
   UsernameBinding,
 } from "./telegram-entity-store.ts";
+export type {
+  GiftCatalogEntry,
+  GiftCatalogEntryInput,
+  GiftCatalogStore,
+} from "./gift-catalog-store.ts";

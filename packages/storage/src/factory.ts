@@ -1,16 +1,19 @@
 import {
   createInMemoryApiKeyStore,
+  createInMemoryGiftCatalogStore,
   createInMemoryReportStore,
   createInMemoryTelegramEntityStore,
   createInMemoryTenantStore,
 } from "./memory/index.ts";
 import type { ApiKeyStore } from "./interfaces/api-key-store.ts";
+import type { GiftCatalogStore } from "./interfaces/gift-catalog-store.ts";
 import type { ReportStore } from "./interfaces/report-store.ts";
 import type { TelegramEntityStore } from "./interfaces/telegram-entity-store.ts";
 import type { TenantStore } from "./interfaces/tenant-store.ts";
 import {
   createPostgresApiKeyStore,
   createPostgresClient,
+  createPostgresGiftCatalogStore,
   createPostgresReportStore,
   createPostgresTelegramEntityStore,
   createPostgresTenantStore,
@@ -23,6 +26,8 @@ export interface Storage {
   readonly tenants: TenantStore;
   /** Telegram entity snapshot store — see m3-design.md §4. Added in M3 PR-2. */
   readonly telegramEntities: TelegramEntityStore;
+  /** Telegram gift-catalog cache — see m3-design.md §4. Added in M3 PR-7. */
+  readonly telegramGiftCatalog: GiftCatalogStore;
   /**
    * Releases any underlying resources (e.g. the Postgres pool). Memory
    * storage's close is a no-op. Call on app shutdown.
@@ -59,6 +64,7 @@ export const createStorage = (config: StorageConfig = {}): Storage => {
     apiKeys: createInMemoryApiKeyStore(),
     tenants: createInMemoryTenantStore(),
     telegramEntities: createInMemoryTelegramEntityStore(),
+    telegramGiftCatalog: createInMemoryGiftCatalogStore(),
     close: () => Promise.resolve(),
   };
 };
@@ -73,6 +79,7 @@ const createPostgresStorage = (databaseUrl: string, poolMax: number | undefined)
     apiKeys: createPostgresApiKeyStore(client.db),
     tenants: createPostgresTenantStore(client.db),
     telegramEntities: createPostgresTelegramEntityStore(client.db),
+    telegramGiftCatalog: createPostgresGiftCatalogStore(client.db),
     close: client.close,
   };
 };
