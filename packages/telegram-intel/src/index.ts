@@ -26,3 +26,10 @@ export {
 export type { NotResolvableReason, ResolvedEntity, ResolverResult } from "./entity-resolver.ts";
 export { estimateUserOrBotIdAge, isLikelyVeryNew } from "./id-age-estimator.ts";
 export type { AgeBand, AgeEstimate } from "./id-age-estimator.ts";
+export { analyseMiniAppContent } from "./miniapp-content.ts";
+export type {
+  ApkLink,
+  KeywordMatch,
+  KeywordSeverity,
+  MiniAppContentReport,
+} from "./miniapp-content.ts";

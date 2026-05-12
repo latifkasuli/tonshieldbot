@@ -1,0 +1,111 @@
+{
+  "description": "Phrases that signal classic scam lures — airdrops, free gifts, premium giveaways, wallet-verification baits, gift-upgrade demands. Less absolute than credential-phishing keywords (legitimate marketing can use similar language), so this fires at medium severity unless combined with another tier-1 signal.",
+  "sources": [
+    "https://www.kaspersky.com/blog/telegram-mini-app-phishing/55041/",
+    "https://www.kaspersky.com/blog/phishing-and-scam-in-telegram-2025/54090/",
+    "https://www.ainvest.com/news/telegram-users-targeted-by-scammers-over-100k-digital-gifts-250710102f0fa30e017c167d/",
+    "https://cointelegraph.com/news/ton-ecosystem-scams-rise-stay-safe"
+  ],
+  "categories": [
+    {
+      "category": "airdrop_lure",
+      "severity": "medium",
+      "keywords_en": [
+        "claim your airdrop",
+        "claim airdrop",
+        "claim free",
+        "eligible for airdrop",
+        "you are eligible",
+        "you have a pending airdrop",
+        "unlock your airdrop",
+        "exclusive airdrop"
+      ],
+      "keywords_ru": [
+        "получить airdrop",
+        "забрать airdrop",
+        "забрать аирдроп",
+        "вам положен аирдроп",
+        "получить дроп"
+      ],
+      "keywords_es": [
+        "reclama tu airdrop",
+        "recibe tu airdrop",
+        "eres elegible",
+        "airdrop exclusivo"
+      ],
+      "keywords_zh": ["领取空投", "领取免费空投", "您有资格", "独家空投"]
+    },
+    {
+      "category": "gift_lure",
+      "severity": "medium",
+      "keywords_en": [
+        "unlock your gift",
+        "claim your gift",
+        "you received a gift",
+        "free telegram premium",
+        "free premium subscription",
+        "free gift",
+        "limited time offer",
+        "exclusive gift"
+      ],
+      "keywords_ru": [
+        "получить подарок",
+        "разблокировать подарок",
+        "вам пришёл подарок",
+        "бесплатный telegram premium",
+        "бесплатная подписка premium",
+        "активировать подарок"
+      ],
+      "keywords_es": [
+        "reclama tu regalo",
+        "regalo gratis",
+        "premium gratis",
+        "telegram premium gratis"
+      ],
+      "keywords_zh": ["免费礼物", "免费 telegram premium", "领取礼物", "独家礼物"]
+    },
+    {
+      "category": "wallet_verification_lure",
+      "severity": "medium",
+      "keywords_en": [
+        "verify your wallet",
+        "verify wallet to claim",
+        "connect wallet to claim",
+        "wallet verification required",
+        "verify ownership"
+      ],
+      "keywords_ru": ["подтвердите кошелёк", "подтвердить кошелек", "верификация кошелька"],
+      "keywords_es": ["verifica tu wallet", "verifica tu cartera", "verificación de wallet"],
+      "keywords_zh": ["验证钱包", "钱包验证", "连接钱包以领取"]
+    },
+    {
+      "category": "gift_upgrade_lure",
+      "severity": "high",
+      "keywords_en": [
+        "upgrade your gift",
+        "send ton to upgrade",
+        "pay to upgrade gift",
+        "upgrade fee"
+      ],
+      "keywords_ru": ["плата за апгрейд", "оплата апгрейда подарка", "обновить подарок"],
+      "keywords_es": ["mejora tu regalo", "tarifa de mejora", "cargo de mejora"],
+      "keywords_zh": ["升级礼物", "升级费用"]
+    },
+    {
+      "category": "urgency_pressure",
+      "severity": "medium",
+      "keywords_en": [
+        "limited time",
+        "expires in",
+        "only today",
+        "act now",
+        "last chance",
+        "claim before",
+        "offer ends"
+      ],
+      "keywords_ru": ["ограниченное время", "только сегодня", "последний шанс", "успей получить"],
+      "keywords_es": ["tiempo limitado", "solo hoy", "última oportunidad"],
+      "keywords_zh": ["限时", "仅今日", "最后机会", "立即领取"]
+    }
+  ]
+}
