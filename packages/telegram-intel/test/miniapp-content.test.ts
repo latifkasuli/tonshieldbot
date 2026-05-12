@@ -125,6 +125,17 @@ describe("analyseMiniAppContent — APK download detection", () => {
     expect(report.apkLinks[0]?.filename).toBe("app.apk");
   });
 
+  it("flags a relative .apk href on the same origin", () => {
+    const body =
+      '<html><body><a href="/downloads/claim-reward.apk#install">Install</a></body></html>';
+    const report = analyseMiniAppContent(body);
+    expect(report.apkLinks).toHaveLength(1);
+    expect(report.apkLinks[0]).toEqual({
+      href: "/downloads/claim-reward.apk#install",
+      filename: "claim-reward.apk",
+    });
+  });
+
   it("flags an APK reference in unquoted / minified markup", () => {
     // Scam pages frequently use unquoted attributes or inline JS strings.
     // The substring-based regex catches these.

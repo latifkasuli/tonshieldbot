@@ -174,27 +174,35 @@ const matchKeywords = (
 /**
  * Find `.apk` references in the body. Two patterns the FEMITBOT-class
  * campaigns use:
- *   - `<a href="*.apk">` direct download links
- *   - `<a href="*.apk?...">` with query strings (CDN-served downloads)
+ *   - `<a href="*.apk">` direct download links, including relative URLs
+ *   - absolute CDN URLs ending in `.apk?...`
  *
- * Note we DON'T require quoting on the href — minified or obfuscated
- * pages may use single-quoted, unquoted, or `data-*` attribute carriers.
- * Match anything that looks like a URL ending in `.apk` (with optional
- * query/fragment) inside the body. Caller verifies the host vs the
- * Mini App origin.
+ * We keep an href-specific pattern for relative links so same-origin APKs
+ * are not missed, plus a broad absolute-URL pattern for obfuscated inline
+ * JS strings. Both tolerate optional query/fragment suffixes.
  */
-const APK_LINK_PATTERN = /\b((?:https?:)?\/\/[^\s"'<>]+?\.apk\b[^\s"'<>]*)/gi;
+const APK_HREF_PATTERN = /\bhref\s*=\s*["']?([^\s"'<>]+?\.apk\b[^\s"'<>]*)/gi;
+const APK_ABSOLUTE_URL_PATTERN = /\b((?:https?:)?\/\/[^\s"'<>]+?\.apk\b[^\s"'<>]*)/gi;
 
 const extractApkLinks = (body: string): readonly ApkLink[] => {
   const links: ApkLink[] = [];
   const seen = new Set<string>();
-  let match: RegExpExecArray | null;
-  while ((match = APK_LINK_PATTERN.exec(body)) !== null) {
-    const href = match[1];
-    if (href === undefined || seen.has(href)) continue;
+
+  const add = (href: string | undefined): void => {
+    if (href === undefined || seen.has(href)) return;
     seen.add(href);
     links.push({ href, filename: extractFilename(href) });
+  };
+
+  let match: RegExpExecArray | null;
+  while ((match = APK_HREF_PATTERN.exec(body)) !== null) {
+    add(match[1]);
   }
+
+  while ((match = APK_ABSOLUTE_URL_PATTERN.exec(body)) !== null) {
+    add(match[1]);
+  }
+
   return links;
 };
 

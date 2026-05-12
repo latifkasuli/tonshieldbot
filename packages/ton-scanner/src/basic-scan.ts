@@ -178,9 +178,10 @@ const gatherScanResult = async (input: ScanInput, deps: GatherDeps): Promise<Gat
   //   1. `telegram_handle` / `telegram_url` / `telegram_deeplink` with no
   //      resolvable target (e.g. `t.me/c/<id>/...`, `t.me/+...`,
   //      `t.me/joinchat/...` — none of which have a username segment).
-  //   2. `telegram_miniapp_url` and `telegram_nft_link` — kinds the
-  //      classifier recognises but whose scanners land in PR-5 / PR-6.
-  //   3. `telegram_entities` store missing — caller misconfiguration; we
+  //   2. `telegram_nft_link` — kind the classifier recognises but whose
+  //      scanner lands in PR-6.
+  //   3. `telegram_entities` store missing for entity-resolution scans —
+  //      caller misconfiguration; we
   //      surface a finding rather than silently empty out the report.
   if (
     input.kind === "telegram_handle" ||
@@ -189,10 +190,6 @@ const gatherScanResult = async (input: ScanInput, deps: GatherDeps): Promise<Gat
     input.kind === "telegram_miniapp_url" ||
     input.kind === "telegram_nft_link"
   ) {
-    if (deps.telegramEntities === undefined) {
-      return inputRecognisedNotScanned(input.kind, "snapshot_store_not_wired");
-    }
-
     if (input.kind === "telegram_miniapp_url") {
       // PR-5: Mini App content scanner. We fetch the URL via safe-fetch
       // and analyse the body for credential-phishing / lure / APK
@@ -202,6 +199,10 @@ const gatherScanResult = async (input: ScanInput, deps: GatherDeps): Promise<Gat
       // `generic_url` below.
       const result = await scanMiniAppContent(input.url, deps.cache);
       return { findings: result.findings, actions: result.actions };
+    }
+
+    if (deps.telegramEntities === undefined) {
+      return inputRecognisedNotScanned(input.kind, "snapshot_store_not_wired");
     }
 
     if (input.kind === "telegram_nft_link") {
