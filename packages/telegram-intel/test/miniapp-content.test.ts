@@ -217,3 +217,61 @@ describe("analyseMiniAppContent — case insensitivity & robustness", () => {
     expect(sameCategory).toHaveLength(1);
   });
 });
+
+// ── TON address extraction ───────────────────────────────────────────────
+
+describe("analyseMiniAppContent — TON address extraction", () => {
+  it("extracts a friendly EQ-prefixed address", () => {
+    const body = "<p>Send to: EQAvlWFDxGF2lXm67y4yzC3scvrcnxX_QvW7YDcGFXQ8ZACU</p>";
+    const report = analyseMiniAppContent(body);
+    expect(report.tonAddresses).toEqual([
+      { raw: "EQAvlWFDxGF2lXm67y4yzC3scvrcnxX_QvW7YDcGFXQ8ZACU", form: "friendly" },
+    ]);
+  });
+
+  it("extracts the four friendly prefixes (EQ, UQ, kQ, 0Q)", () => {
+    const body = `
+      <li>EQAvlWFDxGF2lXm67y4yzC3scvrcnxX_QvW7YDcGFXQ8ZACU</li>
+      <li>UQAvlWFDxGF2lXm67y4yzC3scvrcnxX_QvW7YDcGFXQ8ZAAA</li>
+      <li>kQAvlWFDxGF2lXm67y4yzC3scvrcnxX_QvW7YDcGFXQ8ZBBB</li>
+      <li>0QAvlWFDxGF2lXm67y4yzC3scvrcnxX_QvW7YDcGFXQ8ZCCC</li>
+    `;
+    const report = analyseMiniAppContent(body);
+    expect(report.tonAddresses).toHaveLength(4);
+    expect(report.tonAddresses.every((a) => a.form === "friendly")).toBe(true);
+  });
+
+  it("extracts a raw 0:hex address", () => {
+    const body = "<code>0:2f95614388e1b5d99e3cdf2e32cc2dec72fadc9f15ff42f5bb6037061574f4c1</code>";
+    const report = analyseMiniAppContent(body);
+    expect(report.tonAddresses).toEqual([
+      {
+        raw: "0:2f95614388e1b5d99e3cdf2e32cc2dec72fadc9f15ff42f5bb6037061574f4c1",
+        form: "raw",
+      },
+    ]);
+  });
+
+  it("does not match base64-shaped substrings inside larger tokens", () => {
+    // `og:image` URL ends in a query parameter that contains "EQ..." but is
+    // not itself a 48-char base64url address.
+    const body = `<meta property="og:image" content="https://cdn.example.com/img?id=EQAvlWFDxGF2lXm67y4yzC3scvrcnxX_QvW7YDcGFXQ8ZACUEXTRA"/>`;
+    const report = analyseMiniAppContent(body);
+    expect(report.tonAddresses).toEqual([]);
+  });
+
+  it("returns an empty list when no addresses are present", () => {
+    const body = "<html><body>nothing to see</body></html>";
+    const report = analyseMiniAppContent(body);
+    expect(report.tonAddresses).toEqual([]);
+  });
+
+  it("deduplicates the same address appearing multiple times", () => {
+    const body = `
+      <p>EQAvlWFDxGF2lXm67y4yzC3scvrcnxX_QvW7YDcGFXQ8ZACU</p>
+      <p>also: EQAvlWFDxGF2lXm67y4yzC3scvrcnxX_QvW7YDcGFXQ8ZACU</p>
+    `;
+    const report = analyseMiniAppContent(body);
+    expect(report.tonAddresses).toHaveLength(1);
+  });
+});

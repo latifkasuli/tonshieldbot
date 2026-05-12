@@ -105,6 +105,13 @@ export interface ApkLink {
   readonly filename: string | null;
 }
 
+export interface TonAddress {
+  /** Raw address as it appeared on the page (case preserved). */
+  readonly raw: string;
+  /** Shape: friendly base64url (EQ/UQ/kQ/0Q) or raw `0:hex` form. */
+  readonly form: "friendly" | "raw";
+}
+
 export interface MiniAppContentReport {
   /** All credential-phishing keyword hits (deduplicated by exact phrase). */
   readonly credentialPhishingMatches: readonly KeywordMatch[];
@@ -112,6 +119,13 @@ export interface MiniAppContentReport {
   readonly lureMatches: readonly KeywordMatch[];
   /** APK links discovered in the page body. */
   readonly apkLinks: readonly ApkLink[];
+  /**
+   * TON wallet addresses discovered in the page body. Used by the
+   * gift-upgrade scanner: a page bundling `gift_upgrade_lure` keywords
+   * with a raw TON address is offering an off-protocol upgrade fee,
+   * never legitimate (real upgrades go through in-app Stars).
+   */
+  readonly tonAddresses: readonly TonAddress[];
   /** Set of unique languages observed (informational; for evidence rendering). */
   readonly languagesSeen: readonly ("en" | "ru" | "es" | "zh")[];
 }
@@ -133,6 +147,7 @@ export const analyseMiniAppContent = (htmlBody: string): MiniAppContentReport =>
   const credentialPhishingMatches = matchKeywords(lowered, CREDENTIAL_PHISHING_KEYWORDS);
   const lureMatches = matchKeywords(lowered, LURE_LANGUAGE_KEYWORDS);
   const apkLinks = extractApkLinks(htmlBody);
+  const tonAddresses = extractTonAddresses(htmlBody);
 
   const languagesSeen = new Set<"en" | "ru" | "es" | "zh">();
   for (const m of credentialPhishingMatches) languagesSeen.add(m.language);
@@ -142,6 +157,7 @@ export const analyseMiniAppContent = (htmlBody: string): MiniAppContentReport =>
     credentialPhishingMatches,
     lureMatches,
     apkLinks,
+    tonAddresses,
     languagesSeen: Array.from(languagesSeen),
   };
 };
@@ -211,4 +227,45 @@ const extractFilename = (href: string): string | null => {
   const lastSegment = stripped.split("/").pop();
   if (lastSegment === undefined || lastSegment.length === 0) return null;
   return lastSegment.toLowerCase().endsWith(".apk") ? lastSegment : null;
+};
+
+// ── TON address detection ────────────────────────────────────────────────
+
+/**
+ * Find TON wallet addresses in the body. Two canonical shapes:
+ *
+ *   - Friendly base64url: 48 chars, prefix `EQ`/`UQ`/`kQ`/`0Q`. Used in
+ *     UIs and on-chain explorers; what users paste.
+ *   - Raw `0:hex`: `0:` + 64 hex chars. Less common in UI text but seen
+ *     in API payloads embedded in marketing pages.
+ *
+ * Word-boundary anchored so we don't false-positive on
+ * "EQAAAA..." embedded inside a longer base64 string (e.g. an `og:image`
+ * URL with a `?file=EQ...XYZ` query). The trailing boundary requires
+ * non-base64-alphabet character or end-of-string.
+ */
+const TON_FRIENDLY_PATTERN =
+  /(?<![A-Za-z0-9_-])((?:EQ|UQ|kQ|0Q)[A-Za-z0-9_-]{46})(?![A-Za-z0-9_-])/g;
+const TON_RAW_PATTERN = /(?<![A-Za-z0-9_-])(0:[a-fA-F0-9]{64})(?![A-Za-z0-9_-])/g;
+
+const extractTonAddresses = (body: string): readonly TonAddress[] => {
+  const addresses: TonAddress[] = [];
+  const seen = new Set<string>();
+
+  let match: RegExpExecArray | null;
+  while ((match = TON_FRIENDLY_PATTERN.exec(body)) !== null) {
+    const raw = match[1];
+    if (raw === undefined || seen.has(raw)) continue;
+    seen.add(raw);
+    addresses.push({ raw, form: "friendly" });
+  }
+
+  while ((match = TON_RAW_PATTERN.exec(body)) !== null) {
+    const raw = match[1];
+    if (raw === undefined || seen.has(raw)) continue;
+    seen.add(raw);
+    addresses.push({ raw, form: "raw" });
+  }
+
+  return addresses;
 };

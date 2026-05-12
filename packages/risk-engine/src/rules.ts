@@ -426,6 +426,28 @@ export const coreRules = [
       "Be sceptical of urgency framing inside Mini Apps. Verify any airdrop / gift / Premium offer through the project's official website or verified channel before connecting a wallet or paying any fee.",
     defaultScoreDelta: 25,
   },
+  {
+    id: "TELEGRAM_GIFT_TON_ADDRESS_FOR_UPGRADE",
+    category: "telegram",
+    severity: "high",
+    title: "Gift-upgrade page demands a raw TON transfer",
+    description:
+      "The Mini App page body bundles gift-upgrade lure language (`upgrade your gift`, `upgrade fee`, etc.) with a raw TON wallet address. Legitimate Fragment gift upgrades are paid in Telegram Stars through the in-app flow — never via a raw TON transfer to a wallet address printed on a page. This shape is the documented gift-upgrade-fee fraud pattern (Pavel Durov publicly warned about it; ainvest documented $100K+ losses).",
+    recommendation:
+      "Do not send TON to the address shown on this page. If you genuinely want to upgrade a Telegram gift, do it through Fragment's official UI or the in-app Stars flow.",
+    defaultScoreDelta: 45,
+  },
+  {
+    id: "TELEGRAM_GIFT_LINK_NOT_VERIFIED",
+    category: "telegram",
+    severity: "low",
+    title: "Telegram gift link could not be verified",
+    description:
+      "Submitted a `t.me/nft/<slug>` collectible link but Telegram's public gift page didn't return the expected markers — most likely the slug doesn't resolve to a live collectible (Telegram 302-redirects unknown slugs to the homepage). Could also indicate a fabricated link in a phishing message. Evidence carries the `reason` discriminator: `slug_marker_missing` (page exists but no gift markers), `slug_marker_mismatch` (page resolves to a DIFFERENT slug than the one submitted — strong fraud signal), `non_gift_page` (request landed on telegram.org or another non-gift page), or `redirected_off_path` (final URL no longer points at `/nft/<slug>`).",
+    recommendation:
+      "Treat this gift reference as not-yet-verified. If a message claims to be selling, transferring, or upgrading this collectible, do not act on it until you can confirm the slug at fragment.com or via Telegram's in-app gift list.",
+    defaultScoreDelta: 10,
+  },
 ] as const satisfies readonly RuleDefinition[];
 
 export type CoreRuleId = (typeof coreRules)[number]["id"];

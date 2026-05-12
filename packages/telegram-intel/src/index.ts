@@ -32,4 +32,11 @@ export type {
   KeywordMatch,
   KeywordSeverity,
   MiniAppContentReport,
+  TonAddress,
 } from "./miniapp-content.ts";
+export { parseGiftPage } from "./gift-link-resolver.ts";
+export type {
+  GiftLinkNotVerifiedReason,
+  GiftLinkResolution,
+  GiftMetadata,
+} from "./gift-link-resolver.ts";

@@ -47,3 +47,52 @@ describe("createBasicScan — telegram_miniapp_url wiring", () => {
     );
   });
 });
+
+describe("createBasicScan — telegram_nft_link wiring", () => {
+  it("runs the gift-link scanner without requiring a Telegram entity store (PR-6 replaces PR-2 not-scanned placeholder)", async () => {
+    const target = new URL("https://t.me/nft/PlushPepe-10");
+
+    mockedFetch.mockResolvedValue({
+      ok: true,
+      value: {
+        body: `
+          <meta property="og:title" content="Plush Pepe #10" />
+          <meta property="al:ios:url" content="tg://nft?slug=PlushPepe-10" />
+        `,
+        contentType: "text/html",
+        finalUrl: target,
+      },
+    });
+
+    const { createBasicScan } = await import("../src/basic-scan.ts");
+    const report = await createBasicScan({ rawInput: target.toString() });
+
+    expect(report.input.kind).toBe("telegram_nft_link");
+    // Verified gift returns an ActionPreview, no finding — but also no
+    // PR-2 "not scanned" placeholder.
+    expect(report.findings.map((f) => f.ruleId)).not.toContain(
+      "TELEGRAM_INPUT_RECOGNISED_NOT_SCANNED",
+    );
+    expect(report.actions.length).toBeGreaterThan(0);
+    expect(report.actions[0]?.kind).toBe("send_nft");
+  });
+
+  it("emits TELEGRAM_GIFT_LINK_NOT_VERIFIED for an unresolved slug", async () => {
+    const target = new URL("https://t.me/nft/Fake-12345");
+
+    // Telegram 302s unknown slugs to the homepage.
+    mockedFetch.mockResolvedValue({
+      ok: true,
+      value: {
+        body: "<html><body>Telegram homepage</body></html>",
+        contentType: "text/html",
+        finalUrl: new URL("https://telegram.org/"),
+      },
+    });
+
+    const { createBasicScan } = await import("../src/basic-scan.ts");
+    const report = await createBasicScan({ rawInput: target.toString() });
+
+    expect(report.findings.map((f) => f.ruleId)).toContain("TELEGRAM_GIFT_LINK_NOT_VERIFIED");
+  });
+});

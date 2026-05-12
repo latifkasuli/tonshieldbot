@@ -96,24 +96,6 @@ describe("createBasicScan composition of static + emulation paths", () => {
 // rather than producing an empty findings array.
 
 describe("createBasicScan — Telegram inputs that should never look 'clean' by accident", () => {
-  it("emits TELEGRAM_INPUT_RECOGNISED_NOT_SCANNED for t.me/nft/<slug> links", async () => {
-    // PR-2 review High #1: nft_link fell through gatherScanResult and
-    // produced no findings. Verdict was therefore "safe" — misleading.
-    const report = await createBasicScan({
-      rawInput: "https://t.me/nft/CrystalBall-42",
-      telegramEntities: createInMemoryTelegramEntityStore(),
-    });
-
-    expect(report.findings.map((f) => f.ruleId)).toContain("TELEGRAM_INPUT_RECOGNISED_NOT_SCANNED");
-    const finding = report.findings.find(
-      (f) => f.ruleId === "TELEGRAM_INPUT_RECOGNISED_NOT_SCANNED",
-    );
-    expect(finding?.evidence).toMatchObject({
-      inputKind: "telegram_nft_link",
-      reason: "scanner_not_implemented_yet",
-    });
-  });
-
   it("emits TELEGRAM_INPUT_RECOGNISED_NOT_SCANNED for t.me URLs with no resolvable handle (joinchat, +invite, /c/...)", async () => {
     // PR-2 review High #2: t.me/+abcdef and t.me/c/<id>/N landed as
     // telegram_url with handle:null and gatherScanResult dropped them.
