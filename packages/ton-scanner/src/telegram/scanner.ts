@@ -2,13 +2,16 @@ import { createFinding, getCoreRule } from "@tonshield/risk-engine";
 import type { ActionPreview, RiskFinding } from "@tonshield/shared";
 import {
   classifyBotApiFailure,
+  estimateUserOrBotIdAge,
   isFiringStrength,
+  isLikelyVeryNew,
   matchAgainstWatchlist,
   matchTextAgainstWatchlist,
   resolveById,
   resolveChannelOrSupergroup,
   resolveUserOrBot,
   seedWatchlist,
+  type AgeEstimate,
   type BrandWatchlistEntry,
   type NotResolvableReason,
   type ResolvedEntity,
@@ -95,7 +98,9 @@ export const scanTelegramEntity = async (
       cooldownMs,
     );
     const impersonation = checkResolvedEntity(input.forwardOriginUser, watchlist);
-    return mergeResults(inputHandleFindings, impersonation, downstream);
+    const merged = mergeResults(inputHandleFindings, impersonation, downstream);
+    const ageFinding = checkEntityAge(input.forwardOriginUser, merged.findings, now);
+    return ageFinding === null ? merged : mergeResults(merged, single(ageFinding));
   }
 
   if (client?.enabled !== true) {
@@ -138,7 +143,9 @@ export const scanTelegramEntity = async (
   if (result.status === "ok") {
     const downstream = await snapshotAndDiff(store, result.entity, "getChat", now, cooldownMs);
     const impersonation = checkResolvedEntity(result.entity, watchlist);
-    return mergeResults(inputHandleFindings, impersonation, downstream);
+    const merged = mergeResults(inputHandleFindings, impersonation, downstream);
+    const ageFinding = checkEntityAge(result.entity, merged.findings, now);
+    return ageFinding === null ? merged : mergeResults(merged, single(ageFinding));
   }
 
   return mergeResults(
@@ -452,6 +459,90 @@ const confidenceRank = (confidence: "low" | "medium" | "high"): number => {
       return 2;
   }
 };
+
+// ── ID age check (PR-4) ────────────────────────────────────────────────────
+
+/**
+ * Set of rule IDs that count as a "tier-1 paired signal" for the
+ * `TELEGRAM_ENTITY_VERY_NEW` rule. The age rule never fires alone — only
+ * when at least one of these is also present on the report. Keeping the
+ * list explicit here (rather than e.g. checking severity ≥ medium) means
+ * adding a new tier-1 rule is a deliberate decision, not an accident of
+ * severity grading.
+ */
+const TIER_1_PAIR_RULES: ReadonlySet<string> = new Set([
+  "TELEGRAM_HANDLE_IMPERSONATES_PROJECT",
+  "TELEGRAM_DISPLAY_NAME_HOMOGLYPH",
+  "TELEGRAM_USERNAME_RECENTLY_CHANGED",
+]);
+
+const VERY_NEW_THRESHOLD_DAYS = 30;
+
+/**
+ * Estimate the entity's age from its numeric ID and emit
+ * `TELEGRAM_ENTITY_VERY_NEW` IFF:
+ *
+ *   1. The entity kind is user or bot (channel/supergroup uses a separate
+ *      ID counter; PR-4 ships user/bot only).
+ *   2. The point-estimated age is ≤ 30 days.
+ *   3. At least one tier-1 paired finding is already present in
+ *      `accumulatedFindings`.
+ *
+ * The pairing requirement is the load-bearing false-positive control:
+ * legitimate new projects DO launch on Telegram every day, and the ID-age
+ * estimator's noise floor is real. The combined signal (newness + brand
+ * impersonation OR username churn) is much higher-confidence than either
+ * alone.
+ *
+ * Returns `null` when any of the gates fail — never produces a noisy
+ * standalone finding.
+ */
+const checkEntityAge = (
+  entity: ResolvedEntity,
+  accumulatedFindings: readonly RiskFinding[],
+  now: Date,
+): RiskFinding | null => {
+  if (entity.kind !== "user" && entity.kind !== "bot") return null;
+
+  const hasPairedSignal = accumulatedFindings.some((f) => TIER_1_PAIR_RULES.has(f.ruleId));
+  if (!hasPairedSignal) return null;
+
+  const estimate = estimateUserOrBotIdAge(entity.id, { now });
+  if (estimate === null) return null;
+  if (!isLikelyVeryNew(estimate, VERY_NEW_THRESHOLD_DAYS)) return null;
+
+  return createFinding({
+    confidence: ageConfidence(estimate),
+    evidence: ageEvidence(entity, estimate, accumulatedFindings),
+    rule: getCoreRule("TELEGRAM_ENTITY_VERY_NEW"),
+  });
+};
+
+const ageConfidence = (estimate: AgeEstimate): "low" | "medium" | "high" => {
+  switch (estimate.band) {
+    case "tight":
+      return "high";
+    case "moderate":
+      return "medium";
+    case "wide":
+      return "low";
+  }
+};
+
+const ageEvidence = (
+  entity: ResolvedEntity,
+  estimate: AgeEstimate,
+  accumulatedFindings: readonly RiskFinding[],
+): Readonly<Record<string, unknown>> => ({
+  entityId: entity.id.toString(),
+  entityKind: entity.kind,
+  estimatedCreatedAt: estimate.estimatedCreatedAt.toISOString(),
+  ageDays: estimate.ageDays,
+  confidenceBandDays: estimate.confidenceBandDays,
+  band: estimate.band,
+  extrapolated: estimate.extrapolated,
+  pairedRuleIds: accumulatedFindings.map((f) => f.ruleId).filter((id) => TIER_1_PAIR_RULES.has(id)),
+});
 
 // ── helpers ─────────────────────────────────────────────────────────────────
 

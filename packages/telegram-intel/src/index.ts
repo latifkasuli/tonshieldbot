@@ -24,3 +24,5 @@ export {
   resolvedEntityFromUser,
 } from "./entity-resolver.ts";
 export type { NotResolvableReason, ResolvedEntity, ResolverResult } from "./entity-resolver.ts";
+export { estimateUserOrBotIdAge, isLikelyVeryNew } from "./id-age-estimator.ts";
+export type { AgeBand, AgeEstimate } from "./id-age-estimator.ts";

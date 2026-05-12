@@ -382,6 +382,17 @@ export const coreRules = [
       "Do not trust the display name. Verify the entity through its canonical handle and official website. Note the handle separately from the display name — Telegram clients render the homoglyph as the brand, but the underlying handle (which is ASCII-only) will not match the legitimate one.",
     defaultScoreDelta: 45,
   },
+  {
+    id: "TELEGRAM_ENTITY_VERY_NEW",
+    category: "telegram",
+    severity: "low",
+    title: "Entity was created very recently",
+    description:
+      "TON Shield's ID-age estimator places this entity's creation within the last 30 days. Telegram dialog IDs are issued in roughly-monotonic blocks, so a recent numeric ID is a strong indicator of recency — but database sharding adds ±60 day noise even with current anchor data. This rule pairs with another tier-1 signal (handle/display-name impersonation, suspicious deep link, etc.) — it never fires alone. Legitimate new projects do launch on Telegram every day; the pairing gate is what makes the combined finding actionable.",
+    recommendation:
+      "Combined with the paired finding, this account is high-risk. Even if the other signal is borderline, recency suggests a freshly-deployed impersonation rather than an established account that happens to have a similar name.",
+    defaultScoreDelta: 10,
+  },
 ] as const satisfies readonly RuleDefinition[];
 
 export type CoreRuleId = (typeof coreRules)[number]["id"];
