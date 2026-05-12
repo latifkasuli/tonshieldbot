@@ -573,3 +573,176 @@ describe("scanTelegramEntity — display name homoglyph", () => {
     });
   });
 });
+
+// ── M3 PR-4: ID-age estimator + TELEGRAM_ENTITY_VERY_NEW ───────────────────
+//
+// The rule fires ONLY when paired with a tier-1 signal. Tests cover both
+// directions: with-pairing fires; without-pairing suppressed; channel/
+// supergroup deferred (no fire even with pairing, until a channel anchor
+// table ships).
+
+describe("scanTelegramEntity — TELEGRAM_ENTITY_VERY_NEW (PR-4)", () => {
+  // A fresh-looking bot ID well past the anchor table's last entry.
+  // The age estimator extrapolates it to a recent date.
+  const FRESH_BOT_ID = 9_500_000_000n;
+  // A clearly-old bot ID anchored in 2019.
+  const OLD_BOT_ID = 925_396_585n;
+
+  it("fires TELEGRAM_ENTITY_VERY_NEW when a fresh-id bot ALSO impersonates a brand", async () => {
+    // Forward-origin path with an entity whose ID is post-anchor-table.
+    const result = await scanTelegramEntity(
+      enabledClient,
+      store,
+      {
+        forwardOriginUser: {
+          id: FRESH_BOT_ID,
+          kind: "bot",
+          username: "tonkeeper_support",
+          activeUsernames: null,
+          displayName: "Tonkeeper",
+          bio: null,
+          photoFileUniqueId: null,
+          isPremium: null,
+          memberCount: null,
+          isBot: true,
+          raw: {},
+        },
+        watchlist: impersonationWatchlist,
+      },
+      { now: new Date("2026-05-11T00:00:00Z") },
+    );
+
+    expect(ruleIds(result.findings)).toContain("TELEGRAM_HANDLE_IMPERSONATES_PROJECT");
+    expect(ruleIds(result.findings)).toContain("TELEGRAM_ENTITY_VERY_NEW");
+    const ageFinding = result.findings.find((f) => f.ruleId === "TELEGRAM_ENTITY_VERY_NEW");
+    expect(ageFinding?.evidence).toMatchObject({
+      entityId: FRESH_BOT_ID.toString(),
+      entityKind: "bot",
+    });
+    expect(ageFinding?.evidence.pairedRuleIds as readonly string[]).toContain(
+      "TELEGRAM_HANDLE_IMPERSONATES_PROJECT",
+    );
+  });
+
+  it("does NOT fire TELEGRAM_ENTITY_VERY_NEW for a fresh-id bot without a paired tier-1 signal", async () => {
+    // Same fresh ID, but the username is generic and doesn't match the
+    // watchlist — no impersonation finding fires, so the age rule
+    // should be suppressed.
+    const result = await scanTelegramEntity(
+      enabledClient,
+      store,
+      {
+        forwardOriginUser: {
+          id: FRESH_BOT_ID,
+          kind: "bot",
+          username: "generic_widget_bot",
+          activeUsernames: null,
+          displayName: "Widget",
+          bio: null,
+          photoFileUniqueId: null,
+          isPremium: null,
+          memberCount: null,
+          isBot: true,
+          raw: {},
+        },
+        watchlist: impersonationWatchlist,
+      },
+      { now: new Date("2026-05-11T00:00:00Z") },
+    );
+
+    expect(ruleIds(result.findings)).not.toContain("TELEGRAM_ENTITY_VERY_NEW");
+  });
+
+  it("does NOT fire TELEGRAM_ENTITY_VERY_NEW for an old-id bot even with impersonation", async () => {
+    // Pairing condition met, but the age estimate is years old — rule
+    // suppressed because the entity isn't actually new.
+    const result = await scanTelegramEntity(
+      enabledClient,
+      store,
+      {
+        forwardOriginUser: {
+          id: OLD_BOT_ID,
+          kind: "bot",
+          username: "tonkeeper_support",
+          activeUsernames: null,
+          displayName: "Tonkeeper",
+          bio: null,
+          photoFileUniqueId: null,
+          isPremium: null,
+          memberCount: null,
+          isBot: true,
+          raw: {},
+        },
+        watchlist: impersonationWatchlist,
+      },
+      { now: new Date("2026-05-11T00:00:00Z") },
+    );
+
+    expect(ruleIds(result.findings)).toContain("TELEGRAM_HANDLE_IMPERSONATES_PROJECT");
+    expect(ruleIds(result.findings)).not.toContain("TELEGRAM_ENTITY_VERY_NEW");
+  });
+
+  it("does NOT fire TELEGRAM_ENTITY_VERY_NEW for channel/supergroup entities (PR-4 ships user/bot only)", async () => {
+    // Channel resolution path with an impersonating username. The age
+    // estimator's anchor table is user/bot only; channel ID counter is
+    // separate. Suppress until a channel anchor table ships.
+    mockedResolveChannel.mockResolvedValue({
+      status: "ok",
+      entity: {
+        // Negative-form channel ID per Bot API. Magnitude similar to a
+        // user ID just to exercise the kind-based gate.
+        id: -1_009_500_000_000n,
+        kind: "channel",
+        username: "tonkeeper_support",
+        activeUsernames: null,
+        displayName: "Tonkeeper",
+        bio: null,
+        photoFileUniqueId: null,
+        isPremium: null,
+        memberCount: null,
+        isBot: false,
+        raw: {},
+      },
+    });
+
+    const result = await scanTelegramEntity(
+      enabledClient,
+      store,
+      { channelOrSupergroupHandle: "tonkeeper_support", watchlist: impersonationWatchlist },
+      { now: new Date("2026-05-11T00:00:00Z") },
+    );
+
+    expect(ruleIds(result.findings)).toContain("TELEGRAM_HANDLE_IMPERSONATES_PROJECT");
+    expect(ruleIds(result.findings)).not.toContain("TELEGRAM_ENTITY_VERY_NEW");
+  });
+
+  it("ID-age extrapolation past the last anchor produces a band='wide' / confidence='low' finding when paired", async () => {
+    // Confirms the extrapolation path is exercised (id > max anchor).
+    const result = await scanTelegramEntity(
+      enabledClient,
+      store,
+      {
+        forwardOriginUser: {
+          id: 12_000_000_000n,
+          kind: "bot",
+          username: "tonkeeper_support",
+          activeUsernames: null,
+          displayName: "Tonkeeper",
+          bio: null,
+          photoFileUniqueId: null,
+          isPremium: null,
+          memberCount: null,
+          isBot: true,
+          raw: {},
+        },
+        watchlist: impersonationWatchlist,
+      },
+      { now: new Date("2026-05-11T00:00:00Z") },
+    );
+
+    const ageFinding = result.findings.find((f) => f.ruleId === "TELEGRAM_ENTITY_VERY_NEW");
+    expect(ageFinding).toBeDefined();
+    expect(ageFinding?.confidence).toBe("low");
+    expect(ageFinding?.evidence).toMatchObject({ band: "wide", extrapolated: true });
+  });
+});
