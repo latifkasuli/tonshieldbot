@@ -15,6 +15,7 @@ import type { TonEmulatorClient } from "@tonshield/ton-emulator";
 import { scanBocWithEmulation } from "./boc/scanner.ts";
 import { classifyInput } from "./classify-input.ts";
 import { scanTonConnectManifest } from "./manifest-scanner.ts";
+import { scanMiniAppContent } from "./telegram/miniapp-scanner.ts";
 import { scanTelegramEntity } from "./telegram/scanner.ts";
 import { scanTransactionJson } from "./transaction/scanner.ts";
 import { scanTransactionWithEmulation } from "./transaction/emulation-scanner.ts";
@@ -177,9 +178,10 @@ const gatherScanResult = async (input: ScanInput, deps: GatherDeps): Promise<Gat
   //   1. `telegram_handle` / `telegram_url` / `telegram_deeplink` with no
   //      resolvable target (e.g. `t.me/c/<id>/...`, `t.me/+...`,
   //      `t.me/joinchat/...` — none of which have a username segment).
-  //   2. `telegram_miniapp_url` and `telegram_nft_link` — kinds the
-  //      classifier recognises but whose scanners land in PR-5 / PR-6.
-  //   3. `telegram_entities` store missing — caller misconfiguration; we
+  //   2. `telegram_nft_link` — kind the classifier recognises but whose
+  //      scanner lands in PR-6.
+  //   3. `telegram_entities` store missing for entity-resolution scans —
+  //      caller misconfiguration; we
   //      surface a finding rather than silently empty out the report.
   if (
     input.kind === "telegram_handle" ||
@@ -188,14 +190,24 @@ const gatherScanResult = async (input: ScanInput, deps: GatherDeps): Promise<Gat
     input.kind === "telegram_miniapp_url" ||
     input.kind === "telegram_nft_link"
   ) {
+    if (input.kind === "telegram_miniapp_url") {
+      // PR-5: Mini App content scanner. We fetch the URL via safe-fetch
+      // and analyse the body for credential-phishing / lure / APK
+      // signals. The classifier doesn't yet emit `telegram_miniapp_url`
+      // by itself — it requires Mini App context — but the branch is
+      // wired for when it does. Until then, the same scanner runs on
+      // `generic_url` below.
+      const result = await scanMiniAppContent(input.url, deps.cache);
+      return { findings: result.findings, actions: result.actions };
+    }
+
     if (deps.telegramEntities === undefined) {
       return inputRecognisedNotScanned(input.kind, "snapshot_store_not_wired");
     }
 
-    if (input.kind === "telegram_miniapp_url" || input.kind === "telegram_nft_link") {
-      // PR-5/PR-6 scope. Classifier recognises the kind; scanner is
-      // deferred. Emit the placeholder finding so the user sees the
-      // skip explicitly.
+    if (input.kind === "telegram_nft_link") {
+      // PR-6 scope (gift catalog). Classifier recognises the kind;
+      // scanner is deferred.
       return inputRecognisedNotScanned(input.kind, "scanner_not_implemented_yet");
     }
 
@@ -207,6 +219,18 @@ const gatherScanResult = async (input: ScanInput, deps: GatherDeps): Promise<Gat
     const result = await scanTelegramEntity(deps.telegramIntel, deps.telegramEntities, scanInput, {
       ...(deps.now === undefined ? {} : { now: deps.now }),
     });
+    return { findings: result.findings, actions: result.actions };
+  }
+
+  // M3 PR-5: generic URL inputs get the Mini App content scanner too.
+  // The check signals (seed phrase, login code, 2FA, APK download, lure
+  // language) are red flags on any web page the user submits — not just
+  // Mini Apps. The classifier deliberately keeps `telegram_miniapp_url`
+  // as a separate kind for stronger Mini-App-context evidence (PR-N when
+  // we have a Mini App context detection path), but the underlying
+  // scanner is identical.
+  if (input.kind === "generic_url") {
+    const result = await scanMiniAppContent(input.url, deps.cache);
     return { findings: result.findings, actions: result.actions };
   }
 

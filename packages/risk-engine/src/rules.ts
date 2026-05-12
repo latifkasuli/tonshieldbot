@@ -393,6 +393,39 @@ export const coreRules = [
       "Combined with the paired finding, this account is high-risk. Even if the other signal is borderline, recency suggests a freshly-deployed impersonation rather than an established account that happens to have a similar name.",
     defaultScoreDelta: 10,
   },
+  {
+    id: "TELEGRAM_MINIAPP_CREDENTIAL_PHISHING",
+    category: "telegram",
+    severity: "critical",
+    title: "Mini App page asks for credentials, seed phrase, or login code",
+    description:
+      "The fetched Mini App page body contains keywords matching the credential-phishing pattern: seed/recovery phrase, mnemonic, private key, Telegram login code, or 2FA / cloud password. Legitimate Mini Apps NEVER prompt for any of these — wallets use OS-level secure stores and Telegram itself never asks for codes inside a third-party Web App. Evidence carries the matched keywords (deduplicated) and the languages they were detected in (per Kaspersky's 2025 Mini App phishing report which documented EN/RU/ES/ZH variants of the same pattern).",
+    recommendation:
+      "Do not enter any credentials, codes, or recovery phrases. Close the Mini App immediately. If a real wallet asked you for this, it would do so in its native app or the official website, never inside a third-party page.",
+    defaultScoreDelta: 80,
+  },
+  {
+    id: "TELEGRAM_MINIAPP_APK_DOWNLOAD",
+    category: "telegram",
+    severity: "critical",
+    title: "Mini App page serves an Android APK download",
+    description:
+      "The fetched Mini App page body contains a link to an Android Package (`.apk`). The documented FEMITBOT campaign (Bleeping Computer / CTM360, 2024) abused Mini Apps to push fake BBC / NVIDIA / Cineplex / Coreweave APKs, inheriting the parent page's TLS reputation. A legitimate Mini App has no reason to push an APK — Telegram itself is the install path for any first-party functionality.",
+    recommendation:
+      "Do not install the APK. Close the Mini App immediately. Even if the parent app appears legitimate, an APK download from a Mini App context is a near-certain malware-delivery channel.",
+    defaultScoreDelta: 80,
+  },
+  {
+    id: "TELEGRAM_MINIAPP_LURE_LANGUAGE",
+    category: "telegram",
+    severity: "medium",
+    title: "Mini App page uses classic scam-lure language",
+    description:
+      "The fetched Mini App page body contains airdrop-claim, free-gift, wallet-verification, gift-upgrade, or urgency-pressure phrases consistent with documented Telegram-side scam patterns. Legitimate marketing CAN use similar wording, so this signal alone is medium severity — but combined with credential-phishing keywords, an APK download, or a brand-impersonation finding, it strongly supports the scam interpretation.",
+    recommendation:
+      "Be sceptical of urgency framing inside Mini Apps. Verify any airdrop / gift / Premium offer through the project's official website or verified channel before connecting a wallet or paying any fee.",
+    defaultScoreDelta: 25,
+  },
 ] as const satisfies readonly RuleDefinition[];
 
 export type CoreRuleId = (typeof coreRules)[number]["id"];
