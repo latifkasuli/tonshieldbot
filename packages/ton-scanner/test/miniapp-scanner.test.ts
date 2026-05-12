@@ -181,6 +181,54 @@ describe("scanMiniAppContent — fetch failures", () => {
   });
 });
 
+// ── gift-upgrade TON address co-occurrence ────────────────────────────────
+
+describe("scanMiniAppContent — gift-upgrade TON address co-occurrence", () => {
+  it("fires TELEGRAM_GIFT_TON_ADDRESS_FOR_UPGRADE when gift_upgrade_lure + TON address co-occur", async () => {
+    mockedFetch.mockResolvedValue(
+      okResponse(
+        `<html><body>
+          <p>Upgrade your gift! Send 0.5 TON to upgrade your collectible.</p>
+          <p>Address: EQAvlWFDxGF2lXm67y4yzC3scvrcnxX_QvW7YDcGFXQ8ZACU</p>
+        </body></html>`,
+      ),
+    );
+
+    const result = await scanMiniAppContent(TARGET);
+    const ids = ruleIds(result.findings);
+    expect(ids).toContain("TELEGRAM_GIFT_TON_ADDRESS_FOR_UPGRADE");
+    const finding = result.findings.find(
+      (f) => f.ruleId === "TELEGRAM_GIFT_TON_ADDRESS_FOR_UPGRADE",
+    );
+    expect(finding?.confidence).toBe("high");
+    expect(finding?.evidence).toMatchObject({
+      url: TARGET.toString(),
+    });
+    expect(finding?.evidence.tonAddresses).toEqual([
+      {
+        address: "EQAvlWFDxGF2lXm67y4yzC3scvrcnxX_QvW7YDcGFXQ8ZACU",
+        form: "friendly",
+      },
+    ]);
+  });
+
+  it("does NOT fire when only gift_upgrade lure is present without a TON address", async () => {
+    mockedFetch.mockResolvedValue(okResponse("<html><body>Upgrade your gift today!</body></html>"));
+
+    const result = await scanMiniAppContent(TARGET);
+    expect(ruleIds(result.findings)).not.toContain("TELEGRAM_GIFT_TON_ADDRESS_FOR_UPGRADE");
+  });
+
+  it("does NOT fire when only a TON address is present without gift_upgrade lure", async () => {
+    mockedFetch.mockResolvedValue(
+      okResponse("<p>Donate: EQAvlWFDxGF2lXm67y4yzC3scvrcnxX_QvW7YDcGFXQ8ZACU</p>"),
+    );
+
+    const result = await scanMiniAppContent(TARGET);
+    expect(ruleIds(result.findings)).not.toContain("TELEGRAM_GIFT_TON_ADDRESS_FOR_UPGRADE");
+  });
+});
+
 // ── final URL evidence (redirect handling) ────────────────────────────────
 
 describe("scanMiniAppContent — final URL after redirect", () => {

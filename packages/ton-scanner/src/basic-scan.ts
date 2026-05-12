@@ -15,6 +15,7 @@ import type { TonEmulatorClient } from "@tonshield/ton-emulator";
 import { scanBocWithEmulation } from "./boc/scanner.ts";
 import { classifyInput } from "./classify-input.ts";
 import { scanTonConnectManifest } from "./manifest-scanner.ts";
+import { scanGiftLink } from "./telegram/gift-scanner.ts";
 import { scanMiniAppContent } from "./telegram/miniapp-scanner.ts";
 import { scanTelegramEntity } from "./telegram/scanner.ts";
 import { scanTransactionJson } from "./transaction/scanner.ts";
@@ -201,14 +202,16 @@ const gatherScanResult = async (input: ScanInput, deps: GatherDeps): Promise<Gat
       return { findings: result.findings, actions: result.actions };
     }
 
-    if (deps.telegramEntities === undefined) {
-      return inputRecognisedNotScanned(input.kind, "snapshot_store_not_wired");
+    if (input.kind === "telegram_nft_link") {
+      // PR-6: gift-link public-page resolver. Doesn't depend on the
+      // entity snapshot store — it fetches `t.me/nft/<slug>` directly
+      // and inspects the `al:ios:url` meta marker for verification.
+      const result = await scanGiftLink(input.url, input.slug, deps.cache);
+      return { findings: result.findings, actions: result.actions };
     }
 
-    if (input.kind === "telegram_nft_link") {
-      // PR-6 scope (gift catalog). Classifier recognises the kind;
-      // scanner is deferred.
-      return inputRecognisedNotScanned(input.kind, "scanner_not_implemented_yet");
+    if (deps.telegramEntities === undefined) {
+      return inputRecognisedNotScanned(input.kind, "snapshot_store_not_wired");
     }
 
     const scanInput = telegramScanInputFor(input);

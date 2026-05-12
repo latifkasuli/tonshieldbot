@@ -105,6 +105,36 @@ export const scanMiniAppContent = async (
     );
   }
 
+  // PR-6 (gift-upgrade fraud): when gift-upgrade lure language AND a
+  // raw TON address co-occur on the same page, the page is offering an
+  // off-protocol upgrade fee. Legitimate Fragment gift upgrades go
+  // through in-app Stars only; a TON-address printed on the page is the
+  // documented "send 0.5 TON to upgrade your gift" scam.
+  const giftUpgradeLures = report.lureMatches.filter((m) => m.category === "gift_upgrade_lure");
+  if (giftUpgradeLures.length > 0 && report.tonAddresses.length > 0) {
+    findings.push(
+      createFinding({
+        confidence: "high",
+        evidence: {
+          url: fetchResult.value.finalUrl.toString(),
+          ...(fetchResult.value.finalUrl.toString() === url.toString()
+            ? {}
+            : { requestedUrl: url.toString() }),
+          lureMatches: giftUpgradeLures.map((m) => ({
+            category: m.category,
+            language: m.language,
+            phrase: m.phrase,
+          })),
+          tonAddresses: report.tonAddresses.slice(0, 5).map((a) => ({
+            address: a.raw,
+            form: a.form,
+          })),
+        },
+        rule: getCoreRule("TELEGRAM_GIFT_TON_ADDRESS_FOR_UPGRADE"),
+      }),
+    );
+  }
+
   return { findings, actions: [], report };
 };
 

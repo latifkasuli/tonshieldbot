@@ -35,5 +35,7 @@ export { scanTelegramEntity } from "./telegram/scanner.ts";
 export type { ScanTelegramEntityInput, TelegramScanResult } from "./telegram/scanner.ts";
 export { scanMiniAppContent } from "./telegram/miniapp-scanner.ts";
 export type { MiniAppScanResult } from "./telegram/miniapp-scanner.ts";
+export { scanGiftLink } from "./telegram/gift-scanner.ts";
+export type { GiftScanResult } from "./telegram/gift-scanner.ts";
 export { isScanResultCacheable } from "./cacheability.ts";
 export type { DecodedPayload, ParsedMessage } from "./transaction/types.ts";
