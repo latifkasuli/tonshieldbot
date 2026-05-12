@@ -6,6 +6,9 @@ export type {
   CreateApiKeyInput,
   CreateTenantInput,
   CreatedApiKey,
+  GiftCatalogEntry,
+  GiftCatalogEntryInput,
+  GiftCatalogStore,
   RateLimitTier,
   RecordSnapshotResult,
   ReportStore,
@@ -22,6 +25,7 @@ export type {
 export { apiKeyScopes, rateLimitTiers } from "./interfaces/index.ts";
 export {
   createInMemoryApiKeyStore,
+  createInMemoryGiftCatalogStore,
   createInMemoryReportStore,
   createInMemoryTelegramEntityStore,
   createInMemoryTenantStore,
@@ -32,6 +36,7 @@ export type { Storage, StorageConfig } from "./factory.ts";
 export {
   createPostgresApiKeyStore,
   createPostgresClient,
+  createPostgresGiftCatalogStore,
   createPostgresReportStore,
   createPostgresTelegramEntityStore,
   createPostgresTenantStore,
