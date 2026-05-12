@@ -484,7 +484,7 @@ const VERY_NEW_THRESHOLD_DAYS = 30;
  *
  *   1. The entity kind is user or bot (channel/supergroup uses a separate
  *      ID counter; PR-4 ships user/bot only).
- *   2. The age estimate (including its confidence band) is ≤ 30 days.
+ *   2. The point-estimated age is ≤ 30 days.
  *   3. At least one tier-1 paired finding is already present in
  *      `accumulatedFindings`.
  *

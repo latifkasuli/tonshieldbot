@@ -26,8 +26,8 @@ import anchorsRaw from "../data/id-age-anchors.json" with { type: "json" };
  *
  * Bands we report:
  *   - `tight` (±14 days)  — adjacent anchors are within 30 days of each
- *     other AND ≥ 2017 AND ≤ 2021. The dense early/mid-2010s coverage in
- *     `tdage` is the only zone where this is honest.
+ *     other before the 2022 migration era. The dense early/mid-2010s
+ *     coverage in `tdage` is the only zone where this is honest.
  *   - `moderate` (±45 days) — adjacent anchors within 90 days of each
  *     other, anywhere.
  *   - `wide` (±90 days) — everywhere else: post-2021 (sharding noise floor
@@ -161,6 +161,8 @@ export const estimateUserOrBotIdAge = (
   id: bigint | number,
   options: { readonly now?: Date } = {},
 ): AgeEstimate | null => {
+  if (typeof id === "number" && !Number.isFinite(id)) return null;
+
   const idBig = typeof id === "number" ? BigInt(Math.trunc(id)) : id;
   if (idBig <= 0n) return null;
   if (idBig < HAND_ALLOCATED_CEILING) return null;

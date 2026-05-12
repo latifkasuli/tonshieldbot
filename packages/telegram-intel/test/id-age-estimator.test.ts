@@ -13,6 +13,12 @@ describe("estimateUserOrBotIdAge — invalid / out-of-range inputs", () => {
     expect(estimateUserOrBotIdAge(-1_000_000_000_000n, { now: NOW })).toBeNull();
   });
 
+  it("returns null for non-finite numeric inputs", () => {
+    expect(estimateUserOrBotIdAge(Number.NaN, { now: NOW })).toBeNull();
+    expect(estimateUserOrBotIdAge(Number.POSITIVE_INFINITY, { now: NOW })).toBeNull();
+    expect(estimateUserOrBotIdAge(Number.NEGATIVE_INFINITY, { now: NOW })).toBeNull();
+  });
+
   it("returns null for hand-allocated pre-2014 IDs (< 1_000_000)", () => {
     // Aayco/Creation README: 'Older IDs (e.g. short ones like 25) are not
     // timestamp-based.' We return null rather than guess.
