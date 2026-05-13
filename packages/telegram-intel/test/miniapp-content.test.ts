@@ -116,6 +116,18 @@ describe("analyseMiniAppContent — lure language", () => {
     expect(report.lureMatches.some((m) => m.category === "stars_off_protocol_lure")).toBe(true);
   });
 
+  it("does NOT flag `button for stars` as Stars off-protocol TON demand", () => {
+    const body = "<html><body>Tap the button for Stars balance details.</body></html>";
+    const report = analyseMiniAppContent(body);
+    expect(report.lureMatches.some((m) => m.category === "stars_off_protocol_lure")).toBe(false);
+  });
+
+  it("does NOT flag `stars for tonight` as Stars off-protocol TON demand", () => {
+    const body = "<html><body>Watch the stars for tonight's astronomy stream.</body></html>";
+    const report = analyseMiniAppContent(body);
+    expect(report.lureMatches.some((m) => m.category === "stars_off_protocol_lure")).toBe(false);
+  });
+
   it("flags Stars discount lure (EN)", () => {
     const body = "<html><body>Cheap Telegram Stars — 50% off this weekend!</body></html>";
     const report = analyseMiniAppContent(body);

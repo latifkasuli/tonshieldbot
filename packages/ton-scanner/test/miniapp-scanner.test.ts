@@ -281,6 +281,24 @@ describe("scanMiniAppContent — Stars off-protocol TON demand", () => {
     const result = await scanMiniAppContent(TARGET);
     expect(ruleIds(result.findings)).toContain("TELEGRAM_STARS_OFF_PROTOCOL_TON_DEMAND");
   });
+
+  it("does NOT fire on `button for stars` substring overlap", async () => {
+    mockedFetch.mockResolvedValue(
+      okResponse("<html><body>Tap the button for Stars balance details.</body></html>"),
+    );
+
+    const result = await scanMiniAppContent(TARGET);
+    expect(ruleIds(result.findings)).not.toContain("TELEGRAM_STARS_OFF_PROTOCOL_TON_DEMAND");
+  });
+
+  it("does NOT fire on `stars for tonight` substring overlap", async () => {
+    mockedFetch.mockResolvedValue(
+      okResponse("<html><body>Watch the stars for tonight's astronomy stream.</body></html>"),
+    );
+
+    const result = await scanMiniAppContent(TARGET);
+    expect(ruleIds(result.findings)).not.toContain("TELEGRAM_STARS_OFF_PROTOCOL_TON_DEMAND");
+  });
 });
 
 describe("scanMiniAppContent — Stars discount lure", () => {
