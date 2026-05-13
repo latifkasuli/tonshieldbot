@@ -481,6 +481,28 @@ export const coreRules = [
       "If the chat is using this gift to suggest endorsement or authority, do not trust that signal. Verify the gift's publisher through Fragment or the in-app gift list before treating it as a credibility marker.",
     defaultScoreDelta: 25,
   },
+  {
+    id: "TELEGRAM_STARS_OFF_PROTOCOL_TON_DEMAND",
+    category: "telegram",
+    severity: "high",
+    title: "Page asks the user to buy Telegram Stars by sending TON",
+    description:
+      "The fetched page body advertises a way to acquire Telegram Stars by transferring TON directly to a wallet or bot — for example `buy stars with TON`, `send TON to get Stars`, `exchange TON for Stars`. Legitimate Stars purchases go through Telegram's in-app flow priced in the XTR currency; a page asking for an off-protocol TON transfer is the documented bypass pattern used to redirect payment to an attacker-controlled wallet, with no Stars delivered. Evidence lists the matched phrases.",
+    recommendation:
+      "Do not transfer TON to this page or any wallet it advertises. Buy Stars only from Telegram's in-app `@stars` flow or from a Stars purchase prompt inside an official client.",
+    defaultScoreDelta: 45,
+  },
+  {
+    id: "TELEGRAM_STARS_DISCOUNT_LURE",
+    category: "telegram",
+    severity: "medium",
+    title: "Page advertises discounted Telegram Stars",
+    description:
+      "The fetched page body advertises Telegram Stars at a discount, on sale, or below market — for example `cheap Stars`, `Stars 50% off`, `half-price Stars`. Telegram Stars have a fixed in-app price set by Telegram; third-party `discount` storefronts are a documented scam shape, typically pairing a too-good-to-be-true price with an off-protocol payment flow. The signal is medium on its own because some legitimate channels do run promotional copy; treat it as a strong escalator when paired with `TELEGRAM_STARS_OFF_PROTOCOL_TON_DEMAND` or any credential-phishing or brand-impersonation finding on the same page.",
+    recommendation:
+      "Be sceptical of `cheap Stars` offers. Buy Stars only at Telegram's in-app price.",
+    defaultScoreDelta: 25,
+  },
 ] as const satisfies readonly RuleDefinition[];
 
 export type CoreRuleId = (typeof coreRules)[number]["id"];

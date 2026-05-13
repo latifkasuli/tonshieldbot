@@ -135,6 +135,65 @@ export const scanMiniAppContent = async (
     );
   }
 
+  // PR-32 (Stars off-protocol TON demand): page advertises buying
+  // Stars by transferring TON. The phrase set itself is the smoking
+  // gun — these phrases name both halves of the scam (Stars + TON),
+  // so unlike the gift-upgrade rule we don't require a separate TON
+  // address on the page. A printed address adds confidence when
+  // present but isn't required to fire.
+  const starsOffProtocolMatches = report.lureMatches.filter(
+    (m) => m.category === "stars_off_protocol_lure",
+  );
+  if (starsOffProtocolMatches.length > 0) {
+    findings.push(
+      createFinding({
+        confidence: "high",
+        evidence: {
+          ...keywordEvidence(
+            url,
+            fetchResult.value.finalUrl,
+            starsOffProtocolMatches,
+            report.languagesSeen,
+          ),
+          ...(report.tonAddresses.length === 0
+            ? {}
+            : {
+                tonAddresses: report.tonAddresses.slice(0, 5).map((a) => ({
+                  address: a.raw,
+                  form: a.form,
+                })),
+              }),
+        },
+        rule: getCoreRule("TELEGRAM_STARS_OFF_PROTOCOL_TON_DEMAND"),
+      }),
+    );
+  }
+
+  // PR-32 (Stars discount lure): page advertises Stars at a discount /
+  // below market. Softer signal than off-protocol TON demand, but a
+  // strong escalator when paired with credential phishing or
+  // off-protocol TON demand on the same page.
+  const starsDiscountMatches = report.lureMatches.filter(
+    (m) => m.category === "stars_discount_lure",
+  );
+  if (starsDiscountMatches.length > 0) {
+    findings.push(
+      createFinding({
+        confidence:
+          starsOffProtocolMatches.length > 0 || report.credentialPhishingMatches.length > 0
+            ? "high"
+            : "medium",
+        evidence: keywordEvidence(
+          url,
+          fetchResult.value.finalUrl,
+          starsDiscountMatches,
+          report.languagesSeen,
+        ),
+        rule: getCoreRule("TELEGRAM_STARS_DISCOUNT_LURE"),
+      }),
+    );
+  }
+
   return { findings, actions: [], report };
 };
 

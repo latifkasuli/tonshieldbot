@@ -229,6 +229,117 @@ describe("scanMiniAppContent — gift-upgrade TON address co-occurrence", () => 
   });
 });
 
+// ── PR-32 Stars rules ────────────────────────────────────────────────────
+
+describe("scanMiniAppContent — Stars off-protocol TON demand", () => {
+  it("fires TELEGRAM_STARS_OFF_PROTOCOL_TON_DEMAND on `buy stars with ton` phrasing", async () => {
+    mockedFetch.mockResolvedValue(
+      okResponse("<html><body>Buy Telegram Stars with TON. Best rate!</body></html>"),
+    );
+
+    const result = await scanMiniAppContent(TARGET);
+    const ids = ruleIds(result.findings);
+    expect(ids).toContain("TELEGRAM_STARS_OFF_PROTOCOL_TON_DEMAND");
+    const finding = result.findings.find(
+      (f) => f.ruleId === "TELEGRAM_STARS_OFF_PROTOCOL_TON_DEMAND",
+    );
+    expect(finding?.confidence).toBe("high");
+    expect(finding?.evidence.matches).toEqual(
+      expect.arrayContaining([expect.objectContaining({ category: "stars_off_protocol_lure" })]),
+    );
+  });
+
+  it("does NOT require a TON address on the page (phrase itself is the signal)", async () => {
+    mockedFetch.mockResolvedValue(
+      okResponse("<html><body>Send TON to get Stars right now.</body></html>"),
+    );
+
+    const result = await scanMiniAppContent(TARGET);
+    expect(ruleIds(result.findings)).toContain("TELEGRAM_STARS_OFF_PROTOCOL_TON_DEMAND");
+  });
+
+  it("includes any TON addresses found on the page in evidence", async () => {
+    mockedFetch.mockResolvedValue(
+      okResponse(
+        "<html><body>Buy Stars with TON — send to EQAvlWFDxGF2lXm67y4yzC3scvrcnxX_QvW7YDcGFXQ8ZACU</body></html>",
+      ),
+    );
+
+    const result = await scanMiniAppContent(TARGET);
+    const finding = result.findings.find(
+      (f) => f.ruleId === "TELEGRAM_STARS_OFF_PROTOCOL_TON_DEMAND",
+    );
+    expect(finding?.evidence.tonAddresses).toEqual([
+      { address: "EQAvlWFDxGF2lXm67y4yzC3scvrcnxX_QvW7YDcGFXQ8ZACU", form: "friendly" },
+    ]);
+  });
+
+  it("fires on Russian off-protocol phrasing", async () => {
+    mockedFetch.mockResolvedValue(
+      okResponse("<html><body>Купить звёзды за TON. Быстро и дёшево.</body></html>"),
+    );
+    const result = await scanMiniAppContent(TARGET);
+    expect(ruleIds(result.findings)).toContain("TELEGRAM_STARS_OFF_PROTOCOL_TON_DEMAND");
+  });
+
+  it("does NOT fire on `button for stars` substring overlap", async () => {
+    mockedFetch.mockResolvedValue(
+      okResponse("<html><body>Tap the button for Stars balance details.</body></html>"),
+    );
+
+    const result = await scanMiniAppContent(TARGET);
+    expect(ruleIds(result.findings)).not.toContain("TELEGRAM_STARS_OFF_PROTOCOL_TON_DEMAND");
+  });
+
+  it("does NOT fire on `stars for tonight` substring overlap", async () => {
+    mockedFetch.mockResolvedValue(
+      okResponse("<html><body>Watch the stars for tonight's astronomy stream.</body></html>"),
+    );
+
+    const result = await scanMiniAppContent(TARGET);
+    expect(ruleIds(result.findings)).not.toContain("TELEGRAM_STARS_OFF_PROTOCOL_TON_DEMAND");
+  });
+});
+
+describe("scanMiniAppContent — Stars discount lure", () => {
+  it("fires TELEGRAM_STARS_DISCOUNT_LURE on `cheap telegram stars` phrasing", async () => {
+    mockedFetch.mockResolvedValue(
+      okResponse("<html><body>Cheap Telegram Stars — half-price stars all week.</body></html>"),
+    );
+    const result = await scanMiniAppContent(TARGET);
+    const ids = ruleIds(result.findings);
+    expect(ids).toContain("TELEGRAM_STARS_DISCOUNT_LURE");
+    const finding = result.findings.find((f) => f.ruleId === "TELEGRAM_STARS_DISCOUNT_LURE");
+    expect(finding?.confidence).toBe("medium");
+  });
+
+  it("upgrades discount-lure confidence to high when paired with off-protocol TON demand", async () => {
+    mockedFetch.mockResolvedValue(
+      okResponse(
+        "<html><body>Cheap Stars on sale! Buy Stars with TON for the lowest price.</body></html>",
+      ),
+    );
+    const result = await scanMiniAppContent(TARGET);
+    const discount = result.findings.find((f) => f.ruleId === "TELEGRAM_STARS_DISCOUNT_LURE");
+    const offProtocol = result.findings.find(
+      (f) => f.ruleId === "TELEGRAM_STARS_OFF_PROTOCOL_TON_DEMAND",
+    );
+    expect(discount?.confidence).toBe("high");
+    expect(offProtocol?.confidence).toBe("high");
+  });
+
+  it("upgrades discount-lure confidence to high when paired with credential phishing", async () => {
+    mockedFetch.mockResolvedValue(
+      okResponse(
+        "<html><body>Discount stars! Enter your seed phrase to verify your wallet first.</body></html>",
+      ),
+    );
+    const result = await scanMiniAppContent(TARGET);
+    const discount = result.findings.find((f) => f.ruleId === "TELEGRAM_STARS_DISCOUNT_LURE");
+    expect(discount?.confidence).toBe("high");
+  });
+});
+
 // ── final URL evidence (redirect handling) ────────────────────────────────
 
 describe("scanMiniAppContent — final URL after redirect", () => {

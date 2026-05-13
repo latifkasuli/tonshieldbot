@@ -106,6 +106,86 @@
       "keywords_ru": ["ограниченное время", "только сегодня", "последний шанс", "успей получить"],
       "keywords_es": ["tiempo limitado", "solo hoy", "última oportunidad"],
       "keywords_zh": ["限时", "仅今日", "最后机会", "立即领取"]
+    },
+    {
+      "category": "stars_off_protocol_lure",
+      "severity": "high",
+      "keywords_en": [
+        "buy stars with ton",
+        "buy telegram stars with ton",
+        "purchase stars with ton",
+        "send ton to get stars",
+        "send ton for stars",
+        "exchange ton for stars",
+        "swap ton for stars",
+        "stars via ton",
+        "pay in ton for stars",
+        "deposit ton get stars"
+      ],
+      "keywords_ru": [
+        "купить звезды за ton",
+        "купить звёзды за ton",
+        "звезды за ton",
+        "звёзды за ton",
+        "обменять ton на звезды",
+        "обмен ton на звёзды",
+        "telegram stars за ton",
+        "stars за ton"
+      ],
+      "keywords_es": [
+        "comprar stars con ton",
+        "comprar telegram stars con ton",
+        "stars por ton",
+        "intercambiar ton por stars",
+        "envia ton para stars",
+        "envía ton por stars"
+      ],
+      "keywords_zh": [
+        "用ton购买stars",
+        "用ton购买星星",
+        "用ton买星星",
+        "ton换stars",
+        "ton兑换stars",
+        "发送ton获得stars"
+      ]
+    },
+    {
+      "category": "stars_discount_lure",
+      "severity": "medium",
+      "keywords_en": [
+        "cheap stars",
+        "cheap telegram stars",
+        "discount stars",
+        "discounted stars",
+        "stars discount",
+        "stars 50% off",
+        "stars half price",
+        "half-price stars",
+        "half price stars",
+        "stars on sale",
+        "buy stars cheaper",
+        "stars below market"
+      ],
+      "keywords_ru": [
+        "дешевые звезды",
+        "дешёвые звёзды",
+        "звезды со скидкой",
+        "звёзды со скидкой",
+        "скидка на звезды",
+        "скидка на звёзды",
+        "купить звезды дешевле",
+        "купить звёзды дешевле"
+      ],
+      "keywords_es": [
+        "stars baratas",
+        "stars baratos",
+        "telegram stars baratas",
+        "stars con descuento",
+        "stars rebajadas",
+        "stars al 50%",
+        "stars a mitad de precio"
+      ],
+      "keywords_zh": ["便宜的stars", "便宜星星", "stars打折", "星星打折", "stars折扣", "半价stars"]
     }
   ]
 }
