@@ -39,15 +39,23 @@ describe("parseBusinessRights — letter-table decoding", () => {
 
   it("preserves case sensitivity — D and d are distinct rights", () => {
     const r = parseBusinessRights("dD");
-    expect(r.recognised).toEqual(
-      asSet(["can_delete_outgoing_messages", "can_delete_all_messages"]),
-    );
+    expect(r.recognised).toEqual(asSet(["can_delete_sent_messages", "can_delete_all_messages"]));
   });
 
   it("collects unknown letters in `unknown` rather than failing", () => {
     const r = parseBusinessRights("rXYzZ");
     expect(r.recognised.has("can_reply")).toBe(true);
     expect(r.unknown).toEqual(expect.arrayContaining(["X", "Y", "z", "Z"]));
+  });
+
+  it("does NOT run the letter decoder when the input contains separators (regression: read_messages)", () => {
+    // Pre-fix bug: `read_messages` decoded into `r,a,d,m,e,s,a,g,e,s` via
+    // the letter table and produced a spurious `can_transfer_stars`.
+    // The packed-pattern gate now skips letter decoding for any input
+    // containing underscores or other non-letter chars.
+    const r = parseBusinessRights("read_messages");
+    expect(r.recognised).toEqual(asSet(["can_read_messages"]));
+    expect(includesDangerousRight(r)).toBe(false);
   });
 });
 
@@ -66,7 +74,7 @@ describe("parseBusinessRights — field-name decoding (fallback)", () => {
     const allFields: readonly BusinessRight[] = [
       "can_reply",
       "can_read_messages",
-      "can_delete_outgoing_messages",
+      "can_delete_sent_messages",
       "can_delete_all_messages",
       "can_edit_name",
       "can_edit_bio",
@@ -96,11 +104,65 @@ describe("parseBusinessRights — field-name decoding (fallback)", () => {
   });
 });
 
-describe("parseBusinessRights — mixed formats", () => {
-  it("recognises rights from both strategies together", () => {
-    // Field name + letter `r` on the same payload.
-    const r = parseBusinessRights("can_transfer_stars+r");
-    expect(r.recognised).toEqual(asSet(["can_transfer_stars", "can_reply"]));
+describe("parseBusinessRights — MTProto-style aliases", () => {
+  it("maps `transfer_stars` to can_transfer_stars (dangerous)", () => {
+    const r = parseBusinessRights("transfer_stars");
+    expect(r.recognised).toEqual(asSet(["can_transfer_stars"]));
+    expect(includesDangerousRight(r)).toBe(true);
+  });
+
+  it("maps `sell_gifts` to can_transfer_and_upgrade_gifts (dangerous neighbour)", () => {
+    const r = parseBusinessRights("sell_gifts");
+    expect(r.recognised).toEqual(asSet(["can_transfer_and_upgrade_gifts"]));
+    expect(includesDangerousRight(r)).toBe(true);
+  });
+
+  it("maps `delete_sent_messages` to can_delete_sent_messages (NOT dangerous)", () => {
+    const r = parseBusinessRights("delete_sent_messages");
+    expect(r.recognised).toEqual(asSet(["can_delete_sent_messages"]));
+    expect(includesDangerousRight(r)).toBe(false);
+  });
+
+  it("maps `delete_received_messages` to can_delete_all_messages (dangerous neighbour)", () => {
+    const r = parseBusinessRights("delete_received_messages");
+    expect(r.recognised).toEqual(asSet(["can_delete_all_messages"]));
+    expect(includesDangerousRight(r)).toBe(true);
+  });
+
+  it("maps the legacy `can_delete_outgoing_messages` to the current can_delete_sent_messages", () => {
+    const r = parseBusinessRights("can_delete_outgoing_messages");
+    expect(r.recognised).toEqual(asSet(["can_delete_sent_messages"]));
+  });
+
+  it("handles a comma-separated MTProto-style list", () => {
+    const r = parseBusinessRights("read_messages,transfer_stars,sell_gifts");
+    expect(r.recognised).toEqual(
+      asSet(["can_read_messages", "can_transfer_stars", "can_transfer_and_upgrade_gifts"]),
+    );
+    expect(includesDangerousRight(r)).toBe(true);
+  });
+});
+
+describe("parseBusinessRights — tokenised input skips the letter decoder", () => {
+  it("does NOT fall back to letter decoding when input contains an underscore", () => {
+    // `foo_bar` has no alias match. The original buggy parser would
+    // letter-decode `f`,`o`,`o`,`b`,`a`,`r` and produce `can_reply` etc.
+    // The gated parser puts both tokens into `unknown` instead.
+    const r = parseBusinessRights("foo_bar");
+    expect(r.recognised.size).toBe(0);
+    expect(r.unknown).toEqual(expect.arrayContaining(["foo", "bar"]));
+  });
+
+  it("does NOT fall back to letter decoding when input contains a comma", () => {
+    const r = parseBusinessRights("xyz,abc");
+    expect(r.recognised.size).toBe(0);
+    expect(r.unknown).toEqual(expect.arrayContaining(["xyz", "abc"]));
+  });
+
+  it("preserves the alias-matched right even when the rest is unknown", () => {
+    const r = parseBusinessRights("transfer_stars,nonsense");
+    expect(r.recognised).toEqual(asSet(["can_transfer_stars"]));
+    expect(r.unknown).toEqual(expect.arrayContaining(["nonsense"]));
   });
 });
 
