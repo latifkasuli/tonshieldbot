@@ -11,6 +11,7 @@ import { TtlFetchCache } from "@tonshield/safe-fetch";
 import {
   canonicalInputHash,
   type ApiKeyStore,
+  type GiftCatalogStore,
   type ReportStore,
   type TelegramEntityStore,
 } from "@tonshield/storage";
@@ -49,6 +50,13 @@ export interface CreateApiServerOptions {
   readonly telegramIntel: TelegramIntelClient;
   /** Telegram entity snapshot store. From `storage.telegramEntities`. */
   readonly telegramEntities: TelegramEntityStore;
+  /**
+   * Telegram gift catalog cache. From `storage.telegramGiftCatalog`.
+   * Enables `TELEGRAM_GIFT_FROM_UNKNOWN_PUBLISHER` when scanning
+   * channels the bot can access. Population is driven by the worker's
+   * periodic `refreshGiftCatalog` job.
+   */
+  readonly telegramGiftCatalog: GiftCatalogStore;
 }
 
 /**
@@ -152,6 +160,7 @@ export const createApiServer = (
       emulator: options.emulator,
       telegramIntel: options.telegramIntel,
       telegramEntities: options.telegramEntities,
+      telegramGiftCatalog: options.telegramGiftCatalog,
       rawInput: body.data.input,
     });
     // `ReportStore.save()` is dedup-aware: on input-hash conflict it

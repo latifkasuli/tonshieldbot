@@ -19,7 +19,8 @@ import {
   type TelegramIntelClient,
   type WatchlistMatch,
 } from "@tonshield/telegram-intel";
-import type { TelegramEntityStore } from "@tonshield/storage";
+import type { GiftCatalogStore, TelegramEntityStore } from "@tonshield/storage";
+import { scanChatGiftsForUnknownPublisher } from "./gift-publisher-scanner.ts";
 
 export interface TelegramScanResult {
   readonly findings: readonly RiskFinding[];
@@ -73,7 +74,18 @@ export const scanTelegramEntity = async (
   client: TelegramIntelClient | undefined,
   store: TelegramEntityStore,
   input: ScanTelegramEntityInput,
-  options: { readonly now?: Date; readonly snapshotCooldownMs?: number } = {},
+  options: {
+    readonly now?: Date;
+    readonly snapshotCooldownMs?: number;
+    /**
+     * When provided AND the entity resolves as a channel or supergroup,
+     * the scanner opportunistically calls `getChatGifts` and emits
+     * `TELEGRAM_GIFT_FROM_UNKNOWN_PUBLISHER` for owned gifts that fail
+     * the catalog cross-reference. Silently degrades when the bot is not
+     * a member of the chat (the common case for arbitrary scans).
+     */
+    readonly giftCatalog?: GiftCatalogStore;
+  } = {},
 ): Promise<TelegramScanResult> => {
   const now = options.now ?? new Date();
   const cooldownMs = options.snapshotCooldownMs ?? DEFAULT_SNAPSHOT_COOLDOWN_MS;
@@ -145,7 +157,29 @@ export const scanTelegramEntity = async (
     const impersonation = checkResolvedEntity(result.entity, watchlist);
     const merged = mergeResults(inputHandleFindings, impersonation, downstream);
     const ageFinding = checkEntityAge(result.entity, merged.findings, now);
-    return ageFinding === null ? merged : mergeResults(merged, single(ageFinding));
+    const withAge = ageFinding === null ? merged : mergeResults(merged, single(ageFinding));
+
+    // M3 PR-8: opportunistic gift-publisher check for channels / supergroups
+    // when the caller wired a catalog store. Degrades silently when
+    // `getChatGifts` returns not_resolvable (bot not in chat — the common
+    // case) so we don't pollute unrelated reports.
+    // `client.enabled === true` is already guaranteed by the
+    // short-circuit at the top of this function.
+    if (
+      options.giftCatalog !== undefined &&
+      (result.entity.kind === "channel" || result.entity.kind === "supergroup")
+    ) {
+      const giftFindings = await scanChatGiftsForUnknownPublisher(
+        client,
+        options.giftCatalog,
+        result.entity.id,
+      );
+      if (giftFindings.findings.length > 0) {
+        return mergeResults(withAge, { findings: giftFindings.findings, actions: [] });
+      }
+    }
+
+    return withAge;
   }
 
   return mergeResults(

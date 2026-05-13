@@ -66,6 +66,7 @@ bot.on("message:text", async (ctx) => {
       emulator: deps.emulator,
       telegramIntel: deps.telegramIntel,
       telegramEntities: deps.storage.telegramEntities,
+      telegramGiftCatalog: deps.storage.telegramGiftCatalog,
       rawInput,
     });
     // `ReportStore.save()` is dedup-aware and returns the existing row on

@@ -3,6 +3,7 @@ import { createLogger } from "@tonshield/logger";
 import { createInMemoryRateLimiter, defaultTierLimits } from "@tonshield/rate-limit";
 import {
   createInMemoryApiKeyStore,
+  createInMemoryGiftCatalogStore,
   createInMemoryReportStore,
   createInMemoryTelegramEntityStore,
   createInMemoryTenantStore,
@@ -55,6 +56,7 @@ const buildApp = async (
     apiBaseUrl: "https://api.telegram.org",
   });
   const telegramEntities = createInMemoryTelegramEntityStore();
+  const telegramGiftCatalog = createInMemoryGiftCatalogStore();
 
   const app = createApiServer({
     logger,
@@ -64,6 +66,7 @@ const buildApp = async (
     emulator,
     telegramIntel,
     telegramEntities,
+    telegramGiftCatalog,
   });
 
   return { app, apiKeys, reports, rawKey: options.rawKey ?? "tsk_test_key" };
