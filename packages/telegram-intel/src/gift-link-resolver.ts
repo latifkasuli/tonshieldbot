@@ -25,14 +25,16 @@
  *
  * Why not `payments.getUniqueStarGift(slug)` instead: that MTProto method
  * is officially marked **user-only**, not bot-usable per the API spec.
- * Until we ship an MTProto sidecar (deferred to PR-9), the public page
- * scrape is the only authoritative resolver we have.
+ * MTProto sidecar work is deferred indefinitely — current preference is
+ * TON-on-chain lookup against the username/gift NFT contracts when that
+ * surface is ready. Until then, the public page scrape is the only
+ * authoritative resolver we have.
  *
  * **Scope limitation** (documented for the rule description): a verified
  * gift page proves the slug RESOLVES to a real collectible. It does NOT
- * prove the gift instance was sent by a legitimate publisher — that
- * needs the `getChatGifts` / `getUserGifts` inventory path which lands
- * in PR-8.
+ * prove the gift instance was sent by a legitimate publisher — that's
+ * what the owner-inventory path (`scanChatGiftsForUnknownPublisher` in
+ * `@tonshield/ton-scanner`) does for chats the bot can access.
  */
 
 const SLUG_PATTERN = /^[A-Za-z0-9]+-\d+$/;
