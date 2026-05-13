@@ -97,6 +97,37 @@ describe("analyseMiniAppContent — lure language", () => {
     expect(report.lureMatches.some((m) => m.category === "gift_upgrade_lure")).toBe(true);
   });
 
+  it("flags Stars off-protocol TON demand (EN)", () => {
+    const body = "<html><body>Buy Telegram Stars with TON — best rate!</body></html>";
+    const report = analyseMiniAppContent(body);
+    expect(report.lureMatches.some((m) => m.category === "stars_off_protocol_lure")).toBe(true);
+  });
+
+  it("flags Stars off-protocol TON demand (RU)", () => {
+    const body = "<html><body>Купить звёзды за TON, мгновенно.</body></html>";
+    const report = analyseMiniAppContent(body);
+    expect(report.lureMatches.some((m) => m.category === "stars_off_protocol_lure")).toBe(true);
+    expect(report.languagesSeen).toContain("ru");
+  });
+
+  it("flags Stars off-protocol TON demand (ZH)", () => {
+    const body = "<html><body>用TON购买Stars,瞬间到账</body></html>";
+    const report = analyseMiniAppContent(body);
+    expect(report.lureMatches.some((m) => m.category === "stars_off_protocol_lure")).toBe(true);
+  });
+
+  it("flags Stars discount lure (EN)", () => {
+    const body = "<html><body>Cheap Telegram Stars — 50% off this weekend!</body></html>";
+    const report = analyseMiniAppContent(body);
+    expect(report.lureMatches.some((m) => m.category === "stars_discount_lure")).toBe(true);
+  });
+
+  it("flags Stars discount lure (ES)", () => {
+    const body = "<html><body>Stars con descuento — solo hoy.</body></html>";
+    const report = analyseMiniAppContent(body);
+    expect(report.lureMatches.some((m) => m.category === "stars_discount_lure")).toBe(true);
+  });
+
   it("does NOT flag generic word 'wallet' alone (must be phrase-shaped)", () => {
     // 'wallet' as a single word appears on legitimate pages constantly.
     // Lure keywords are phrase-shaped to avoid this.
