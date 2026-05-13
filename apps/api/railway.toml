@@ -11,6 +11,7 @@
 builder = "RAILPACK"
 
 [deploy]
+preDeployCommand = ["pnpm --filter @tonshield/storage migrate:apply"]
 startCommand = "pnpm --filter @tonshield/api start"
 healthcheckPath = "/health"
 healthcheckTimeout = 30
