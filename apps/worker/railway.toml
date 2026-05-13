@@ -1,0 +1,20 @@
+# Railway service config for the TON Shield worker.
+#
+# Pointed at via Railway's "Config-as-Code Path" service setting:
+#     /apps/worker/railway.toml
+#
+# The Railway service's "Root Directory" should remain the repo root so the
+# pnpm workspace install resolves correctly. Railpack auto-detects pnpm from
+# `packageManager` in the root package.json and Node 24 from `engines.node`.
+#
+# The worker runs background jobs (currently: periodic `getAvailableGifts`
+# refresh into the gift_catalog table). No public port and no HTTP
+# healthcheck — Railway falls back to process liveness as the health signal.
+
+[build]
+builder = "RAILPACK"
+
+[deploy]
+startCommand = "pnpm --filter @tonshield/worker start"
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
