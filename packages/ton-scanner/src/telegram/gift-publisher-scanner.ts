@@ -57,6 +57,14 @@ export const scanChatGiftsForUnknownPublisher = async (
   chatId: bigint,
   options: { readonly cap?: number } = {},
 ): Promise<GiftPublisherScanResult> => {
+  // A catalog miss is only meaningful after the catalog has been populated
+  // at least once. Fresh deployments, local memory storage, or a worker that
+  // has not run yet should not turn every owned gift into a false positive.
+  const catalogBaseline = await catalogStore.oldestRefreshedAt();
+  if (catalogBaseline === null) {
+    return EMPTY_RESULT;
+  }
+
   const fetched: ChatGiftsResult = await fetchChatGifts(client, chatId, options);
 
   if (fetched.status !== "ok") {

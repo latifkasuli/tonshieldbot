@@ -63,6 +63,7 @@ describe("scanChatGiftsForUnknownPublisher", () => {
   });
 
   it("returns no findings when the bot cannot access the chat", async () => {
+    await seedCatalog(store, "baseline", 1);
     const getChatGifts = vi
       .fn()
       .mockRejectedValue({ error_code: 400, description: "Bad Request: chat not found" });
@@ -73,6 +74,7 @@ describe("scanChatGiftsForUnknownPublisher", () => {
   });
 
   it("returns no findings when the chat has no owned gifts", async () => {
+    await seedCatalog(store, "baseline", 1);
     const getChatGifts = vi.fn().mockResolvedValue({ gifts: [], next_offset: "" });
     const client = buildClient(getChatGifts);
 
@@ -80,7 +82,20 @@ describe("scanChatGiftsForUnknownPublisher", () => {
     expect(result.findings).toEqual([]);
   });
 
+  it("returns no findings before the catalog has ever been refreshed", async () => {
+    const getChatGifts = vi.fn().mockResolvedValue({
+      gifts: [uniqueGift("missing-gift", "Mystery-1", 1)],
+      next_offset: "",
+    });
+    const client = buildClient(getChatGifts);
+
+    const result = await scanChatGiftsForUnknownPublisher(client, store, 42n);
+    expect(result.findings).toEqual([]);
+    expect(getChatGifts).not.toHaveBeenCalled();
+  });
+
   it("emits TELEGRAM_GIFT_FROM_UNKNOWN_PUBLISHER when a gift_id is absent from the catalog", async () => {
+    await seedCatalog(store, "known-gift", 1);
     const getChatGifts = vi.fn().mockResolvedValue({
       gifts: [uniqueGift("missing-gift", "Mystery-1", 1)],
       next_offset: "",
@@ -107,6 +122,7 @@ describe("scanChatGiftsForUnknownPublisher", () => {
   });
 
   it("does NOT flag a catalog-miss when the gift is from the TON blockchain", async () => {
+    await seedCatalog(store, "known-gift", 1);
     const getChatGifts = vi.fn().mockResolvedValue({
       gifts: [uniqueGift("ton-gift", "Token-1", 1, true)],
       next_offset: "",
@@ -151,6 +167,7 @@ describe("scanChatGiftsForUnknownPublisher", () => {
   });
 
   it("skips regular (non-unique) owned gifts entirely", async () => {
+    await seedCatalog(store, "baseline", 1);
     const getChatGifts = vi.fn().mockResolvedValue({
       gifts: [
         {
