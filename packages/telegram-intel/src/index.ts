@@ -47,3 +47,9 @@ export type {
   NormalisedCatalogGift,
   NormalisedOwnedGift,
 } from "./gift-catalog.ts";
+export {
+  DANGEROUS_RIGHTS,
+  includesDangerousRight,
+  parseBusinessRights,
+} from "./business-rights-parser.ts";
+export type { BusinessRight, BusinessRightsParseResult } from "./business-rights-parser.ts";

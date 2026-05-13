@@ -15,6 +15,7 @@ import type { TonEmulatorClient } from "@tonshield/ton-emulator";
 import { scanBocWithEmulation } from "./boc/scanner.ts";
 import { classifyInput } from "./classify-input.ts";
 import { scanTonConnectManifest } from "./manifest-scanner.ts";
+import { scanBusinessDeeplink } from "./telegram/business-deeplink-scanner.ts";
 import { scanGiftLink } from "./telegram/gift-scanner.ts";
 import { scanMiniAppContent } from "./telegram/miniapp-scanner.ts";
 import { scanTelegramEntity } from "./telegram/scanner.ts";
@@ -221,12 +222,35 @@ const gatherScanResult = async (input: ScanInput, deps: GatherDeps): Promise<Gat
       return { findings: result.findings, actions: result.actions };
     }
 
+    // PR-31: business-bot connection deep links run a synchronous rights
+    // check first. The check is pure (no Bot API, no storage) so it runs
+    // even when the snapshot store isn't wired. Findings merge with any
+    // downstream entity-scanner output below.
+    const businessResult =
+      input.kind === "telegram_deeplink" &&
+      (input.action === "addBusinessBot" || input.action === "startbusiness")
+        ? scanBusinessDeeplink({
+            target: input.target,
+            rawRights: extractRightsPayload(input),
+            action: input.action,
+          })
+        : { findings: [] as readonly RiskFinding[], actions: [] as readonly ActionPreview[] };
+
     if (deps.telegramEntities === undefined) {
+      // Without the snapshot store we can't run the entity scanner, but
+      // the business-rights finding (when present) is still valid
+      // standalone — don't drop it.
+      if (businessResult.findings.length > 0) {
+        return { findings: businessResult.findings, actions: businessResult.actions };
+      }
       return inputRecognisedNotScanned(input.kind, "snapshot_store_not_wired");
     }
 
     const scanInput = telegramScanInputFor(input);
     if (scanInput === null) {
+      if (businessResult.findings.length > 0) {
+        return { findings: businessResult.findings, actions: businessResult.actions };
+      }
       return inputRecognisedNotScanned(input.kind, "no_resolvable_handle_in_url");
     }
 
@@ -234,7 +258,10 @@ const gatherScanResult = async (input: ScanInput, deps: GatherDeps): Promise<Gat
       ...(deps.now === undefined ? {} : { now: deps.now }),
       ...(deps.telegramGiftCatalog === undefined ? {} : { giftCatalog: deps.telegramGiftCatalog }),
     });
-    return { findings: result.findings, actions: result.actions };
+    return {
+      findings: [...businessResult.findings, ...result.findings],
+      actions: [...businessResult.actions, ...result.actions],
+    };
   }
 
   // M3 PR-5: generic URL inputs get the Mini App content scanner too.
@@ -305,6 +332,27 @@ const telegramScanInputFor = (
     return { userOrBotHandle: input.target };
   }
 
+  return null;
+};
+
+/**
+ * Extracts the business-bot rights payload from a parsed deep link. The
+ * deep-link parser lands it in different fields depending on the surface:
+ *
+ *   - `tg://addBusinessBot?bot=X&rights=Y` → `payload = Y`
+ *   - `t.me/<bot>?startbusiness=<state>&rights=Y` → `extras.rights = Y`,
+ *     `payload = <state>` (the state token, not rights)
+ *
+ * Returns `null` when no rights payload is present on either surface.
+ */
+const extractRightsPayload = (input: ScanInput): string | null => {
+  if (input.kind !== "telegram_deeplink") return null;
+  if (input.action === "addBusinessBot") {
+    return input.payload;
+  }
+  if (input.action === "startbusiness") {
+    return input.extras.rights ?? null;
+  }
   return null;
 };
 

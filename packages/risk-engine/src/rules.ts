@@ -449,6 +449,28 @@ export const coreRules = [
     defaultScoreDelta: 10,
   },
   {
+    id: "TELEGRAM_BUSINESS_DEEPLINK_DANGEROUS_RIGHTS",
+    category: "telegram",
+    severity: "critical",
+    title: "Business-bot connection requests dangerous account rights",
+    description:
+      "A `t.me/<bot>?startbusiness=...` or `tg://addBusinessBot?...` deep link is asking the user to grant a bot direct control over their Telegram business account. The requested `rights` payload includes at least one capability that is irreversible or extracts value off-account: transferring Stars, transferring/upgrading gifts, converting gifts to Stars, deleting all messages, editing the account username, or managing stories. A bot with any of these is in a position to drain the account in a single API call. The user typically sees a Telegram-styled consent screen and a long permission list; this scanner surfaces the specific dangerous flags so the user knows what they would be authorising.",
+    recommendation:
+      "Do not connect this bot to your business account. If a project genuinely needs business-bot integration, scrutinise the requested rights — a legitimate integration almost never needs `can_transfer_stars`, `can_transfer_and_upgrade_gifts`, `can_convert_gifts_to_stars`, or `can_edit_username`. If you have already connected, revoke the connection from Telegram → Settings → Business → Chatbots.",
+    defaultScoreDelta: 80,
+  },
+  {
+    id: "TELEGRAM_BUSINESS_DEEPLINK_BROAD_RIGHTS",
+    category: "telegram",
+    severity: "high",
+    title: "Business-bot connection requests many account rights",
+    description:
+      "A business-bot connection deep link is asking for a broad set of rights without including one of the irreversible-harm flags (transfer Stars, transfer/upgrade gifts, convert gifts, edit username, manage stories, delete-all-messages). This is the precursor pattern: read messages + edit profile fields, sometimes paired with view-only access to gifts/Stars. It is less directly damaging than the dangerous-rights variant but still grants persistent surveillance and impersonation capability.",
+    recommendation:
+      "Treat the connection request with caution. Verify the requesting project independently before connecting; revoke from Telegram → Settings → Business → Chatbots if already connected.",
+    defaultScoreDelta: 45,
+  },
+  {
     id: "TELEGRAM_GIFT_FROM_UNKNOWN_PUBLISHER",
     category: "telegram",
     severity: "medium",

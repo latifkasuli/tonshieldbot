@@ -41,5 +41,10 @@ export { refreshGiftCatalog } from "./telegram/gift-catalog-refresh.ts";
 export type { GiftCatalogRefreshResult } from "./telegram/gift-catalog-refresh.ts";
 export { scanChatGiftsForUnknownPublisher } from "./telegram/gift-publisher-scanner.ts";
 export type { GiftPublisherScanResult } from "./telegram/gift-publisher-scanner.ts";
+export { scanBusinessDeeplink } from "./telegram/business-deeplink-scanner.ts";
+export type {
+  BusinessDeeplinkScanInput,
+  BusinessDeeplinkScanResult,
+} from "./telegram/business-deeplink-scanner.ts";
 export { isScanResultCacheable } from "./cacheability.ts";
 export type { DecodedPayload, ParsedMessage } from "./transaction/types.ts";
