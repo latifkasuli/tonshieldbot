@@ -49,7 +49,15 @@ The web app (`apps/web`) is not deployed yet — it's still a placeholder landin
      - `TELEGRAM_API_BASE_URL` (override only when self-hosting a local Bot API server)
      - `NODE_ENV=production`
    - Not used by the worker: `REDIS_URL`, `PORT` — the refresh job is a single periodic `setInterval` and exposes no HTTP surface.
-6. Apply database migrations once before deploying. From a local shell with `DATABASE_URL` pointed at the Railway Postgres:
+6. Database migrations run automatically before each API, Bot, and Worker deployment via each service's Railway `preDeployCommand`:
+
+   ```sh
+   pnpm --filter @tonshield/storage migrate:apply
+   ```
+
+   The migration runner uses a Postgres advisory lock, so it is safe if multiple Railway services deploy at the same time. Only one service applies migrations; the others wait until the lock is released and then observe the database as already up to date.
+
+   You can still run the same command manually from a local shell when needed:
 
    ```sh
    DATABASE_URL=<railway-postgres-url> pnpm --filter @tonshield/storage migrate:apply
@@ -67,7 +75,7 @@ The web app (`apps/web`) is not deployed yet — it's still a placeholder landin
 
 ## Build and start
 
-Both services use Railway's default Railpack builder. Railpack reads `packageManager` and `engines.node` from the root `package.json` to pick pnpm 10.15.1 and Node 24. The default install phase runs `pnpm install --frozen-lockfile` at the repo root, so all workspace packages and devDependencies (including `tsx`) are available.
+All Node services use Railway's default Railpack builder. Railpack reads `packageManager` and `engines.node` from the root `package.json` to pick pnpm 10.15.1 and Node 24. The default install phase runs `pnpm install --frozen-lockfile` at the repo root, so all workspace packages and devDependencies (including `tsx`) are available.
 
 Start commands are explicit in each `railway.toml`:
 
@@ -89,7 +97,15 @@ Use Railway's UI or CLI; do not commit env values to the repo. The repo only con
 
 ## Migrations on deploy
 
-Migrations are not run automatically on service startup — that's risky in a multi-instance deployment and surprises operators. Apply them manually with the command above, or wire a Railway "Job" service that runs `pnpm --filter @tonshield/storage migrate:apply` once before promoting a release.
+Migrations are run automatically by Railway before each service starts using `preDeployCommand`. This happens in a separate one-off container between build and deploy; if migrations fail, Railway does not promote that deployment.
+
+Because API, Bot, and Worker can deploy concurrently from the same repo, the migration command is not raw `drizzle-kit migrate`. It is `packages/storage/scripts/migrate.ts`, which wraps Drizzle's migrator with a Postgres advisory lock. This avoids duplicate/concurrent migration attempts while keeping each service independently deployable.
+
+Operational notes:
+
+- Keep migrations backwards-compatible with the currently running app version. Railway may still have the old deployment serving while a new one builds.
+- Additive migrations are safe for the current stage. For destructive changes, use expand/migrate/contract: add new schema first, deploy app compatibility, backfill, then remove old schema in a later release.
+- `MIGRATION_LOCK_TIMEOUT_MS` can override the default 5-minute lock wait if a migration ever needs longer.
 
 ## Troubleshooting
 
