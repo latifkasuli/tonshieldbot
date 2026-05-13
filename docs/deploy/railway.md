@@ -4,13 +4,14 @@ TON Shield's first deploy target is [Railway](https://railway.app). This doc cap
 
 ## Services
 
-| Railway service | Source         | Config-as-Code path      | Root directory |
-| --------------- | -------------- | ------------------------ | -------------- |
-| API             | `apps/api`     | `/apps/api/railway.toml` | repo root      |
-| Bot             | `apps/bot`     | `/apps/bot/railway.toml` | repo root      |
-| Postgres        | Railway plugin | _n/a_                    | _n/a_          |
+| Railway service | Source         | Config-as-Code path         | Root directory |
+| --------------- | -------------- | --------------------------- | -------------- |
+| API             | `apps/api`     | `/apps/api/railway.toml`    | repo root      |
+| Bot             | `apps/bot`     | `/apps/bot/railway.toml`    | repo root      |
+| Worker          | `apps/worker`  | `/apps/worker/railway.toml` | repo root      |
+| Postgres        | Railway plugin | _n/a_                       | _n/a_          |
 
-The web app (`apps/web`) and worker (`apps/worker`) are not deployed yet — web is a placeholder landing page and worker is a stub.
+The web app (`apps/web`) is not deployed yet — it's still a placeholder landing page.
 
 **Important:** every service's _Root Directory_ stays at the repo root so the pnpm workspace install resolves all `workspace:*` deps. Each service then points at its own `railway.toml` via the _Config-as-Code Path_ setting.
 
@@ -37,13 +38,24 @@ The web app (`apps/web`) and worker (`apps/worker`) are not deployed yet — web
    - Optional:
      - `REDIS_URL` (per-Telegram-user rate limit; in-process is fine for a single bot instance)
      - `NODE_ENV=production`
-5. Apply database migrations once before deploying. From a local shell with `DATABASE_URL` pointed at the Railway Postgres:
+5. Create the Worker service from the same repo:
+   - _Root Directory_: `/`
+   - _Config-as-Code Path_: `/apps/worker/railway.toml`
+   - Required env vars:
+     - `DATABASE_URL` (linked from the Postgres plugin — must point at the same DB as the API/bot, since the worker writes the gift catalog the API reads)
+     - `TELEGRAM_INTEL_BOT_TOKEN` (same value as the API's; without it the worker logs `gift_catalog_refresh_skipped_disabled` and never populates the catalog)
+   - Optional:
+     - `GIFT_CATALOG_REFRESH_INTERVAL_MS` (default `3600000` = 1h; min 60s, max 24h)
+     - `TELEGRAM_API_BASE_URL` (override only when self-hosting a local Bot API server)
+     - `NODE_ENV=production`
+   - Not used by the worker: `REDIS_URL`, `PORT` — the refresh job is a single periodic `setInterval` and exposes no HTTP surface.
+6. Apply database migrations once before deploying. From a local shell with `DATABASE_URL` pointed at the Railway Postgres:
 
    ```sh
    DATABASE_URL=<railway-postgres-url> pnpm --filter @tonshield/storage migrate:apply
    ```
 
-6. Create at least one tenant + API key so partners can call `/v1/risk/scan`:
+7. Create at least one tenant + API key so partners can call `/v1/risk/scan`:
 
    ```sh
    DATABASE_URL=<railway-postgres-url> pnpm --filter @tonshield/storage bootstrap \
@@ -61,6 +73,7 @@ Start commands are explicit in each `railway.toml`:
 
 - API: `pnpm --filter @tonshield/api start` → `tsx src/index.ts`
 - Bot: `pnpm --filter @tonshield/bot start` → `tsx src/index.ts`
+- Worker: `pnpm --filter @tonshield/worker start` → `tsx src/index.ts`
 
 Running TypeScript directly with `tsx` is acceptable for this stage. A future hardening PR will add a build step that emits `.js` and starts with plain `node` for faster cold start and a slimmer image.
 
@@ -68,6 +81,7 @@ Running TypeScript directly with `tsx` is acceptable for this stage. A future ha
 
 - **API**: `GET /health` returns `{ ok: true, service: "tonshield-api" }`. Configured in `apps/api/railway.toml` with a 30s timeout.
 - **Bot**: long-polling, no HTTP server. Railway falls back to process liveness as the health signal. No healthcheck path needed.
+- **Worker**: no HTTP server, same liveness-only posture as the bot. Logs are the operational signal — search Railway's log viewer for `gift_catalog_refreshed` (success) or `gift_catalog_refresh_failed` (degraded).
 
 ## Updating env vars
 
