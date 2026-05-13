@@ -111,10 +111,16 @@ describe("parseBusinessRights — MTProto-style aliases", () => {
     expect(includesDangerousRight(r)).toBe(true);
   });
 
-  it("maps `sell_gifts` to can_transfer_and_upgrade_gifts (dangerous neighbour)", () => {
+  it("maps `sell_gifts` to can_convert_gifts_to_stars (dangerous; MTProto sell = convert to Stars)", () => {
     const r = parseBusinessRights("sell_gifts");
-    expect(r.recognised).toEqual(asSet(["can_transfer_and_upgrade_gifts"]));
+    expect(r.recognised).toEqual(asSet(["can_convert_gifts_to_stars"]));
     expect(includesDangerousRight(r)).toBe(true);
+  });
+
+  it("maps MTProto `view_gifts` to can_view_gifts_and_stars (not dangerous)", () => {
+    const r = parseBusinessRights("view_gifts");
+    expect(r.recognised).toEqual(asSet(["can_view_gifts_and_stars"]));
+    expect(includesDangerousRight(r)).toBe(false);
   });
 
   it("maps `delete_sent_messages` to can_delete_sent_messages (NOT dangerous)", () => {
@@ -137,7 +143,7 @@ describe("parseBusinessRights — MTProto-style aliases", () => {
   it("handles a comma-separated MTProto-style list", () => {
     const r = parseBusinessRights("read_messages,transfer_stars,sell_gifts");
     expect(r.recognised).toEqual(
-      asSet(["can_read_messages", "can_transfer_stars", "can_transfer_and_upgrade_gifts"]),
+      asSet(["can_read_messages", "can_transfer_stars", "can_convert_gifts_to_stars"]),
     );
     expect(includesDangerousRight(r)).toBe(true);
   });

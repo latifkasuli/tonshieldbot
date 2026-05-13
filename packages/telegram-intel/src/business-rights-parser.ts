@@ -132,12 +132,17 @@ const NAME_ALIAS_ENTRIES: readonly [string, BusinessRight][] = [
   ["edit_username", "can_edit_username"],
   ["change_gift_settings", "can_change_gift_settings"],
   ["view_gifts_and_stars", "can_view_gifts_and_stars"],
+  // MTProto's shorter `view_gifts` is the same capability (the
+  // `_and_stars` suffix is the Bot API rename to reflect that the flag
+  // gates Stars-balance visibility too).
+  ["view_gifts", "can_view_gifts_and_stars"],
   ["convert_gifts_to_stars", "can_convert_gifts_to_stars"],
   ["transfer_and_upgrade_gifts", "can_transfer_and_upgrade_gifts"],
-  // MTProto `sell_gifts` is the resale capability — closest Bot API
-  // analogue is `can_transfer_and_upgrade_gifts` because both move a
-  // gift off the account for value extraction.
-  ["sell_gifts", "can_transfer_and_upgrade_gifts"],
+  // MTProto `sell_gifts` is the convert-to-Stars capability, not the
+  // transfer/upgrade one. Both fire the dangerous rule, but evidence
+  // should report the right canonical permission so users know what
+  // they would actually be granting.
+  ["sell_gifts", "can_convert_gifts_to_stars"],
   ["transfer_stars", "can_transfer_stars"],
   ["manage_stories", "can_manage_stories"],
 ];
