@@ -147,15 +147,30 @@ importers:
 
   apps/worker:
     dependencies:
+      '@tonshield/logger':
+        specifier: workspace:*
+        version: link:../../packages/logger
       '@tonshield/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@tonshield/storage':
+        specifier: workspace:*
+        version: link:../../packages/storage
+      '@tonshield/telegram-intel':
+        specifier: workspace:*
+        version: link:../../packages/telegram-intel
+      '@tonshield/ton-scanner':
+        specifier: workspace:*
+        version: link:../../packages/ton-scanner
       bullmq:
         specifier: ^5.76.6
         version: 5.76.6
       ioredis:
         specifier: ^5.10.1
         version: 5.10.1
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
 
   packages/api-auth:
     dependencies:

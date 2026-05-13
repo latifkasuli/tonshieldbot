@@ -9,7 +9,7 @@ import {
 } from "@tonshield/risk-engine";
 import type { ActionPreview, RiskFinding, ScanInput, ScanReport } from "@tonshield/shared";
 import type { FetchCache } from "@tonshield/safe-fetch";
-import type { TelegramEntityStore } from "@tonshield/storage";
+import type { GiftCatalogStore, TelegramEntityStore } from "@tonshield/storage";
 import type { TelegramIntelClient } from "@tonshield/telegram-intel";
 import type { TonEmulatorClient } from "@tonshield/ton-emulator";
 import { scanBocWithEmulation } from "./boc/scanner.ts";
@@ -52,6 +52,13 @@ export interface CreateBasicScanInput {
    * tests can pass an in-memory store directly.
    */
   readonly telegramEntities?: TelegramEntityStore;
+  /**
+   * Telegram gift catalog cache (M3 PR-7). When provided AND the scan
+   * target resolves as a channel/supergroup the bot can access, the
+   * entity scanner cross-references owned gifts against the catalog and
+   * fires `TELEGRAM_GIFT_FROM_UNKNOWN_PUBLISHER` on mismatches.
+   */
+  readonly telegramGiftCatalog?: GiftCatalogStore;
 }
 
 interface GatherResult {
@@ -69,6 +76,9 @@ export const createBasicScan = async (input: CreateBasicScanInput): Promise<Scan
     ...(input.emulator === undefined ? {} : { emulator: input.emulator }),
     ...(input.telegramIntel === undefined ? {} : { telegramIntel: input.telegramIntel }),
     ...(input.telegramEntities === undefined ? {} : { telegramEntities: input.telegramEntities }),
+    ...(input.telegramGiftCatalog === undefined
+      ? {}
+      : { telegramGiftCatalog: input.telegramGiftCatalog }),
     ...(input.now === undefined ? {} : { now: input.now }),
   };
   const { findings, actions } = await gatherScanResult(classifiedInput, deps);
@@ -95,6 +105,7 @@ interface GatherDeps {
   readonly emulator?: TonEmulatorClient;
   readonly telegramIntel?: TelegramIntelClient;
   readonly telegramEntities?: TelegramEntityStore;
+  readonly telegramGiftCatalog?: GiftCatalogStore;
   readonly now?: Date;
 }
 
@@ -221,6 +232,7 @@ const gatherScanResult = async (input: ScanInput, deps: GatherDeps): Promise<Gat
 
     const result = await scanTelegramEntity(deps.telegramIntel, deps.telegramEntities, scanInput, {
       ...(deps.now === undefined ? {} : { now: deps.now }),
+      ...(deps.telegramGiftCatalog === undefined ? {} : { giftCatalog: deps.telegramGiftCatalog }),
     });
     return { findings: result.findings, actions: result.actions };
   }

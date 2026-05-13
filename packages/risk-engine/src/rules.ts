@@ -448,6 +448,17 @@ export const coreRules = [
       "Treat this gift reference as not-yet-verified. If a message claims to be selling, transferring, or upgrading this collectible, do not act on it until you can confirm the slug at fragment.com or via Telegram's in-app gift list.",
     defaultScoreDelta: 10,
   },
+  {
+    id: "TELEGRAM_GIFT_FROM_UNKNOWN_PUBLISHER",
+    category: "telegram",
+    severity: "medium",
+    title: "Owned gift cannot be matched to a known publisher",
+    description:
+      "The scanned chat owns at least one Telegram collectible whose `gift_id` is missing from our cached catalog of Bot-API-issued gifts, AND the gift is not tagged `is_from_blockchain`. Legitimate Fragment-issued gifts always show up in `getAvailableGifts`; absence from the catalog combined with no blockchain provenance is consistent with a fabricated or impersonated gift entry. Evidence lists up to five example slugs with their `gift_id` and the reason each was flagged (`catalog_miss` or `publisher_mismatch`).",
+    recommendation:
+      "If the chat is using this gift to suggest endorsement or authority, do not trust that signal. Verify the gift's publisher through Fragment or the in-app gift list before treating it as a credibility marker.",
+    defaultScoreDelta: 25,
+  },
 ] as const satisfies readonly RuleDefinition[];
 
 export type CoreRuleId = (typeof coreRules)[number]["id"];

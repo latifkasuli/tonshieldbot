@@ -13,6 +13,7 @@ const app = createApiServer({
   emulator: deps.emulator,
   telegramIntel: deps.telegramIntel,
   telegramEntities: deps.storage.telegramEntities,
+  telegramGiftCatalog: deps.storage.telegramGiftCatalog,
 });
 
 serve(

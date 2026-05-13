@@ -40,3 +40,10 @@ export type {
   GiftLinkResolution,
   GiftMetadata,
 } from "./gift-link-resolver.ts";
+export { DEFAULT_CHAT_GIFTS_CAP, fetchAvailableGifts, fetchChatGifts } from "./gift-catalog.ts";
+export type {
+  AvailableGiftsResult,
+  ChatGiftsResult,
+  NormalisedCatalogGift,
+  NormalisedOwnedGift,
+} from "./gift-catalog.ts";

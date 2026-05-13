@@ -6,11 +6,17 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
-    "typecheck": "tsc -p ../../tsconfig.json --noEmit"
+    "typecheck": "tsc -p ../../tsconfig.json --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
+    "@tonshield/logger": "workspace:*",
     "@tonshield/shared": "workspace:*",
+    "@tonshield/storage": "workspace:*",
+    "@tonshield/telegram-intel": "workspace:*",
+    "@tonshield/ton-scanner": "workspace:*",
     "bullmq": "^5.76.6",
-    "ioredis": "^5.10.1"
+    "ioredis": "^5.10.1",
+    "zod": "^4.4.3"
   }
 }
