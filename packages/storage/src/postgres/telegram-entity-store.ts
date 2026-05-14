@@ -257,6 +257,34 @@ export const createPostgresTelegramEntityStore = (db: StorageDb): TelegramEntity
 
     return bindings.reverse();
   },
+
+  async pruneSnapshots({ cutoff, maxRows }) {
+    if (maxRows <= 0) {
+      return { deletedCount: 0 };
+    }
+
+    // CTE picks the oldest `maxRows` eligible rows up front. The DELETE
+    // ... WHERE id IN (subselect) then removes exactly that set. Without
+    // the CTE we'd risk a giant unbounded delete on a misconfigured
+    // retention period; the cap is the load-bearing safety.
+    //
+    // `RETURNING 1` lets `rowCount` carry the actual deleted count even
+    // on impls that don't always populate it from DELETE-without-RETURNING.
+    const result = await db.execute(sql`
+      WITH eligible AS (
+        SELECT id
+        FROM ${telegramEntitySnapshots}
+        WHERE observed_at < ${cutoff.toISOString()}
+        ORDER BY observed_at ASC
+        LIMIT ${maxRows}
+      )
+      DELETE FROM ${telegramEntitySnapshots}
+      WHERE id IN (SELECT id FROM eligible)
+      RETURNING 1
+    `);
+
+    return { deletedCount: result.rowCount ?? 0 };
+  },
 });
 
 const observableAttributesEqual = (

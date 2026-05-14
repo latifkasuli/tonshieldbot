@@ -148,6 +148,52 @@ export const createInMemoryTelegramEntityStore = (): TelegramEntityStore => {
 
       return Promise.resolve(bindings.reverse());
     },
+
+    pruneSnapshots({ cutoff, maxRows }) {
+      if (maxRows <= 0) {
+        return Promise.resolve({ deletedCount: 0 });
+      }
+
+      // Collect candidates across every entity, oldest-first, so the
+      // `maxRows` cap behaves the same way as the indexed Postgres impl
+      // (delete the oldest rows first; subsequent runs catch up).
+      interface Candidate {
+        readonly key: string;
+        readonly index: number;
+        readonly observedAt: Date;
+      }
+      const candidates: Candidate[] = [];
+      for (const [key, history] of snapshotsByEntity) {
+        for (let index = 0; index < history.length; index++) {
+          const row = history[index];
+          if (row !== undefined && row.observedAt < cutoff) {
+            candidates.push({ key, index, observedAt: row.observedAt });
+          }
+        }
+      }
+      candidates.sort((a, b) => a.observedAt.getTime() - b.observedAt.getTime());
+
+      const toDelete = candidates.slice(0, maxRows);
+      const deletedIndicesByKey = new Map<string, Set<number>>();
+      for (const c of toDelete) {
+        const set = deletedIndicesByKey.get(c.key) ?? new Set<number>();
+        set.add(c.index);
+        deletedIndicesByKey.set(c.key, set);
+      }
+
+      for (const [key, indices] of deletedIndicesByKey) {
+        const history = snapshotsByEntity.get(key);
+        if (history === undefined) continue;
+        const kept = history.filter((_, i) => !indices.has(i));
+        if (kept.length === 0) {
+          snapshotsByEntity.delete(key);
+        } else {
+          snapshotsByEntity.set(key, kept);
+        }
+      }
+
+      return Promise.resolve({ deletedCount: toDelete.length });
+    },
   };
 };
 
