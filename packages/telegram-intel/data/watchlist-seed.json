@@ -9,7 +9,13 @@
       "tonkeeper_support",
       "tonkeepersupport",
       "tonkeeper_official",
-      "tonkeeperofficial"
+      "tonkeeperofficial",
+      "tonkeeper_bot",
+      "tonkeeperbot",
+      "tonkeeper_support_bot",
+      "tonkeepersupport_bot",
+      "tonkeeper_official_bot",
+      "tonkeeperofficial_bot"
     ],
     "legitimateHandles": ["tonkeeper"],
     "notes": "Tonkeeper wallet. Per tonkeeper.helpscoutdocs.com/article/123, no one from the Tonkeeper team will ever contact you first. Impersonation cluster commonly uses *_support and *_official suffixes."
@@ -17,14 +23,32 @@
   {
     "brand": "Wallet (Telegram)",
     "category": "wallet",
-    "matchKeys": ["wallet", "telegramwallet", "telegram_wallet", "walletsupport", "wallet_support"],
+    "matchKeys": [
+      "wallet",
+      "telegramwallet",
+      "telegram_wallet",
+      "walletsupport",
+      "wallet_support",
+      "wallet_bot",
+      "walletsupport_bot",
+      "wallet_support_bot"
+    ],
     "legitimateHandles": ["wallet"],
-    "notes": "Telegram's first-party crypto wallet bot (@wallet). Common impersonation: *_support, *_help."
+    "notes": "Telegram's first-party crypto wallet bot (@wallet). Common impersonation: *_support, *_help, *_bot."
   },
   {
     "brand": "Tonhub",
     "category": "wallet",
-    "matchKeys": ["tonhub", "tonhubwallet", "tonhub_wallet", "tonhub_support", "tonhubsupport"],
+    "matchKeys": [
+      "tonhub",
+      "tonhubwallet",
+      "tonhub_wallet",
+      "tonhub_support",
+      "tonhubsupport",
+      "tonhub_bot",
+      "tonhub_support_bot",
+      "tonhubsupport_bot"
+    ],
     "legitimateHandles": ["tonhub"],
     "notes": "Tonhub wallet."
   },
@@ -155,5 +179,24 @@
     "matchKeys": ["ledger", "ledgerwallet", "ledger_wallet", "ledgersupport", "ledger_support"],
     "legitimateHandles": [],
     "notes": "Ledger is a hardware-wallet brand. Any Telegram bot offering Ledger 'support' or 'recovery' is impersonation."
+  },
+  {
+    "brand": "Tonstakers",
+    "category": "validator",
+    "matchKeys": [
+      "tonstakers",
+      "tonstakers_bot",
+      "tonstakersbot",
+      "tonstakers_official",
+      "tonstakersofficial",
+      "tonstakers_support",
+      "tonstakerssupport",
+      "tonstakers_official_bot",
+      "tonstakersofficial_bot",
+      "tonstakers_support_bot",
+      "tonstakerssupport_bot"
+    ],
+    "legitimateHandles": [],
+    "notes": "Tonstakers (tonstakers.com) TON staking platform. Verify any Telegram surface against the platform's own website before staking — staking-bot impersonation is a documented high-loss vector."
   }
 ]

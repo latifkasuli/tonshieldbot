@@ -95,10 +95,9 @@ export const scanTelegramEntity = async (
   // they fire even when Bot API can't be called or returns not-resolvable.
   // The user submitting `@tonkeeper_support` should see the impersonation
   // signal regardless of whether the handle resolves.
-  const inputHandleFindings = checkCandidateHandle(
-    input.channelOrSupergroupHandle ?? input.userOrBotHandle ?? null,
-    watchlist,
-  );
+  const pastedHandle = input.channelOrSupergroupHandle ?? input.userOrBotHandle ?? null;
+  const inputHandleFindings = checkCandidateHandle(pastedHandle, watchlist);
+  const inputFakeBotFindings = checkSensitiveBotCategory(pastedHandle, null, watchlist);
 
   // ── Forwarded-origin user/bot — no Bot API call needed ────────────────
   if (input.forwardOriginUser !== undefined) {
@@ -110,7 +109,14 @@ export const scanTelegramEntity = async (
       cooldownMs,
     );
     const impersonation = checkResolvedEntity(input.forwardOriginUser, watchlist);
-    const merged = mergeResults(inputHandleFindings, impersonation, downstream);
+    const fakeBot = checkSensitiveBotCategory(pastedHandle, input.forwardOriginUser, watchlist);
+    const merged = mergeResults(
+      inputHandleFindings,
+      inputFakeBotFindings,
+      impersonation,
+      fakeBot,
+      downstream,
+    );
     const ageFinding = checkEntityAge(input.forwardOriginUser, merged.findings, now);
     return ageFinding === null ? merged : mergeResults(merged, single(ageFinding));
   }
@@ -118,6 +124,7 @@ export const scanTelegramEntity = async (
   if (client?.enabled !== true) {
     return mergeResults(
       inputHandleFindings,
+      inputFakeBotFindings,
       single(emulationFinding("TELEGRAM_BOT_API_NOT_CONFIGURED")),
     );
   }
@@ -127,6 +134,7 @@ export const scanTelegramEntity = async (
     const result = resolveUserOrBot(input.userOrBotHandle);
     return mergeResults(
       inputHandleFindings,
+      inputFakeBotFindings,
       mapNonOkResolverResult(result, "user_or_bot_handle_requires_prior_context"),
     );
   }
@@ -155,7 +163,14 @@ export const scanTelegramEntity = async (
   if (result.status === "ok") {
     const downstream = await snapshotAndDiff(store, result.entity, "getChat", now, cooldownMs);
     const impersonation = checkResolvedEntity(result.entity, watchlist);
-    const merged = mergeResults(inputHandleFindings, impersonation, downstream);
+    const fakeBot = checkSensitiveBotCategory(pastedHandle, result.entity, watchlist);
+    const merged = mergeResults(
+      inputHandleFindings,
+      inputFakeBotFindings,
+      impersonation,
+      fakeBot,
+      downstream,
+    );
     const ageFinding = checkEntityAge(result.entity, merged.findings, now);
     const withAge = ageFinding === null ? merged : mergeResults(merged, single(ageFinding));
 
@@ -184,6 +199,7 @@ export const scanTelegramEntity = async (
 
   return mergeResults(
     inputHandleFindings,
+    inputFakeBotFindings,
     mapNonOkResolverResult(
       result,
       input.channelOrSupergroupHandle !== undefined
@@ -429,6 +445,72 @@ const checkResolvedEntity = (
   }
 
   return { findings, actions: [] };
+};
+
+/**
+ * PR-33: layered checks for fake wallet / validator bots. Fires
+ * specialised rules on top of the generic `HANDLE_IMPERSONATES_PROJECT`
+ * when the impersonated brand is in a high-risk category AND there's
+ * positive bot signal — either the candidate handle ends in `bot`
+ * (Telegram requires bot usernames to do so) or the resolved/forwarded
+ * entity self-reports as a bot.
+ *
+ * Two candidate slots are inspected so the rule fires under either of
+ * two realistic inputs:
+ *   - User pastes the bot handle cold (Bot API can't resolve user/bot
+ *     handles, but suffix + watchlist still gives us the signal).
+ *   - A message forwarded from the bot resolves through Bot API and
+ *     the entity is_bot is set; the handle may not itself end in `bot`.
+ */
+const checkSensitiveBotCategory = (
+  pastedHandle: string | null,
+  entity: ResolvedEntity | null,
+  watchlist: readonly BrandWatchlistEntry[],
+): TelegramScanResult => {
+  const candidates: string[] = [];
+  if (pastedHandle !== null) {
+    const cleaned = pastedHandle.replace(/^@/, "");
+    if (cleaned.length > 0) candidates.push(cleaned);
+  }
+  if (entity !== null && entity.username !== null && entity.username.length > 0) {
+    if (!candidates.includes(entity.username)) {
+      candidates.push(entity.username);
+    }
+  }
+  if (candidates.length === 0) return EMPTY_RESULT;
+
+  const entityIsBot = entity !== null && (entity.kind === "bot" || entity.isBot === true);
+
+  for (const candidate of candidates) {
+    const match = matchAgainstWatchlist(candidate, watchlist, { candidateHandle: candidate });
+    if (match === null || !isFiringStrength(match)) continue;
+    const category = match.brand.category;
+    if (category !== "wallet" && category !== "validator") continue;
+
+    const handleBotShape = /bot$/i.test(candidate);
+    if (!handleBotShape && !entityIsBot) continue;
+
+    const ruleId =
+      category === "wallet" ? "TELEGRAM_FAKE_WALLET_BOT" : "TELEGRAM_FAKE_VALIDATOR_BOT";
+
+    return single(
+      createFinding({
+        confidence: matchConfidence(match),
+        evidence: {
+          candidate,
+          matchedBrand: match.brand.brand,
+          matchedBrandCategory: category,
+          matchedKey: match.matchedKey,
+          strength: match.strength,
+          similarity: Number(match.similarity.toFixed(4)),
+          botIndicator: entityIsBot ? "entity_is_bot" : "handle_suffix",
+        },
+        rule: getCoreRule(ruleId),
+      }),
+    );
+  }
+
+  return EMPTY_RESULT;
 };
 
 const matchStrengthRank = (match: WatchlistMatch): number => {

@@ -746,3 +746,216 @@ describe("scanTelegramEntity — TELEGRAM_ENTITY_VERY_NEW (PR-4)", () => {
     expect(ageFinding?.evidence).toMatchObject({ band: "wide", extrapolated: true });
   });
 });
+
+// ── PR-33 fake wallet / validator bot rules ──────────────────────────────
+
+const fakeBotWatchlist: readonly BrandWatchlistEntry[] = [
+  {
+    brand: "Tonkeeper",
+    category: "wallet",
+    matchKeys: [
+      "tonkeeper",
+      "tonkeeper_support",
+      "tonkeepersupport",
+      "tonkeeper_bot",
+      "tonkeeper_support_bot",
+      "tonkeepersupport_bot",
+    ],
+    legitimateHandles: ["tonkeeper"],
+  },
+  {
+    brand: "Tonstakers",
+    category: "validator",
+    matchKeys: [
+      "tonstakers",
+      "tonstakers_bot",
+      "tonstakerssupport",
+      "tonstakers_support",
+      "tonstakers_support_bot",
+      "tonstakerssupport_bot",
+    ],
+    legitimateHandles: [],
+  },
+  {
+    brand: "Binance",
+    category: "exchange",
+    matchKeys: ["binance", "binancesupport", "binance_bot"],
+    legitimateHandles: [],
+  },
+];
+
+describe("scanTelegramEntity — fake wallet bot (PR-33)", () => {
+  it("fires TELEGRAM_FAKE_WALLET_BOT on a cold @handle ending in `bot` that matches a wallet brand", async () => {
+    mockedResolveUserOrBot.mockReturnValue({
+      status: "not_resolvable",
+      reason: "user_or_bot_handle_requires_prior_context",
+      description: null,
+    });
+
+    const result = await scanTelegramEntity(
+      enabledClient,
+      store,
+      { userOrBotHandle: "tonkeeper_support_bot", watchlist: fakeBotWatchlist },
+      { now: new Date("2026-05-14T00:00:00Z") },
+    );
+
+    expect(ruleIds(result.findings)).toContain("TELEGRAM_FAKE_WALLET_BOT");
+    // Generic impersonation rule fires alongside.
+    expect(ruleIds(result.findings)).toContain("TELEGRAM_HANDLE_IMPERSONATES_PROJECT");
+    const fakeBot = result.findings.find((f) => f.ruleId === "TELEGRAM_FAKE_WALLET_BOT");
+    expect(fakeBot?.evidence).toMatchObject({
+      matchedBrand: "Tonkeeper",
+      matchedBrandCategory: "wallet",
+      botIndicator: "handle_suffix",
+    });
+  });
+
+  it("does NOT fire on a cold @handle that lacks the `bot` suffix and lacks an entity isBot flag", async () => {
+    mockedResolveUserOrBot.mockReturnValue({
+      status: "not_resolvable",
+      reason: "user_or_bot_handle_requires_prior_context",
+      description: null,
+    });
+
+    const result = await scanTelegramEntity(
+      enabledClient,
+      store,
+      // Bot-shape gate: `tonkeeper_support` ends in `support`, not `bot`.
+      // Generic impersonation fires but the specific wallet-bot rule
+      // requires positive bot signal.
+      { userOrBotHandle: "tonkeeper_support", watchlist: fakeBotWatchlist },
+      { now: new Date("2026-05-14T00:00:00Z") },
+    );
+
+    expect(ruleIds(result.findings)).toContain("TELEGRAM_HANDLE_IMPERSONATES_PROJECT");
+    expect(ruleIds(result.findings)).not.toContain("TELEGRAM_FAKE_WALLET_BOT");
+  });
+
+  it("fires on a forwarded-origin entity where isBot=true even if the handle suffix isn't `bot`", async () => {
+    const result = await scanTelegramEntity(
+      enabledClient,
+      store,
+      {
+        forwardOriginUser: {
+          id: 7_000_000_000n,
+          kind: "bot",
+          username: "tonkeepersupport",
+          activeUsernames: null,
+          displayName: "Tonkeeper Support",
+          bio: null,
+          photoFileUniqueId: null,
+          isPremium: null,
+          memberCount: null,
+          isBot: true,
+          raw: {},
+        },
+        watchlist: fakeBotWatchlist,
+      },
+      { now: new Date("2026-05-14T00:00:00Z") },
+    );
+
+    expect(ruleIds(result.findings)).toContain("TELEGRAM_FAKE_WALLET_BOT");
+    const fakeBot = result.findings.find((f) => f.ruleId === "TELEGRAM_FAKE_WALLET_BOT");
+    expect(fakeBot?.evidence).toMatchObject({ botIndicator: "entity_is_bot" });
+  });
+
+  it("does NOT fire when the legitimate brand handle is submitted", async () => {
+    mockedResolveUserOrBot.mockReturnValue({
+      status: "not_resolvable",
+      reason: "user_or_bot_handle_requires_prior_context",
+      description: null,
+    });
+
+    const result = await scanTelegramEntity(
+      enabledClient,
+      store,
+      { userOrBotHandle: "tonkeeper", watchlist: fakeBotWatchlist },
+      { now: new Date("2026-05-14T00:00:00Z") },
+    );
+
+    expect(ruleIds(result.findings)).not.toContain("TELEGRAM_FAKE_WALLET_BOT");
+  });
+
+  it("survives even when Bot API is disabled (impersonation + fake-bot still surface from the pasted handle)", async () => {
+    const result = await scanTelegramEntity(
+      disabledClient,
+      store,
+      { userOrBotHandle: "tonkeepersupport_bot", watchlist: fakeBotWatchlist },
+      { now: new Date("2026-05-14T00:00:00Z") },
+    );
+
+    expect(ruleIds(result.findings)).toContain("TELEGRAM_FAKE_WALLET_BOT");
+    expect(ruleIds(result.findings)).toContain("TELEGRAM_BOT_API_NOT_CONFIGURED");
+  });
+
+  it("survives a channel/supergroup-routed handle that fails to resolve (plain t.me/<bot> URL path)", async () => {
+    // basic-scan routes plain `t.me/<handle>` as `channelOrSupergroupHandle`
+    // because the classifier can't tell statically whether the handle is a
+    // channel, user, or bot. If `getChat` returns not_resolvable, the
+    // entity scanner must still surface the fake-bot finding from the
+    // pasted handle — otherwise a real user pasting
+    // `https://t.me/tonkeeper_support_bot` would see only the generic
+    // impersonation rule and lose the critical wallet-bot signal.
+    mockedResolveChannel.mockResolvedValue({
+      status: "not_resolvable",
+      reason: "channel_or_supergroup_not_found",
+      description: null,
+    });
+
+    const result = await scanTelegramEntity(
+      enabledClient,
+      store,
+      { channelOrSupergroupHandle: "tonkeeper_support_bot", watchlist: fakeBotWatchlist },
+      { now: new Date("2026-05-14T00:00:00Z") },
+    );
+
+    expect(ruleIds(result.findings)).toContain("TELEGRAM_FAKE_WALLET_BOT");
+    expect(ruleIds(result.findings)).toContain("TELEGRAM_HANDLE_IMPERSONATES_PROJECT");
+    expect(ruleIds(result.findings)).toContain("TELEGRAM_ENTITY_NOT_RESOLVABLE");
+  });
+});
+
+describe("scanTelegramEntity — fake validator bot (PR-33)", () => {
+  it("fires TELEGRAM_FAKE_VALIDATOR_BOT on a cold @handle ending in `bot` that matches a validator brand", async () => {
+    mockedResolveUserOrBot.mockReturnValue({
+      status: "not_resolvable",
+      reason: "user_or_bot_handle_requires_prior_context",
+      description: null,
+    });
+
+    const result = await scanTelegramEntity(
+      enabledClient,
+      store,
+      { userOrBotHandle: "tonstakers_support_bot", watchlist: fakeBotWatchlist },
+      { now: new Date("2026-05-14T00:00:00Z") },
+    );
+
+    expect(ruleIds(result.findings)).toContain("TELEGRAM_FAKE_VALIDATOR_BOT");
+    const fakeBot = result.findings.find((f) => f.ruleId === "TELEGRAM_FAKE_VALIDATOR_BOT");
+    expect(fakeBot?.evidence).toMatchObject({
+      matchedBrand: "Tonstakers",
+      matchedBrandCategory: "validator",
+    });
+  });
+
+  it("does NOT fire wallet-bot OR validator-bot for an exchange-category match (out of scope for these rules)", async () => {
+    mockedResolveUserOrBot.mockReturnValue({
+      status: "not_resolvable",
+      reason: "user_or_bot_handle_requires_prior_context",
+      description: null,
+    });
+
+    const result = await scanTelegramEntity(
+      enabledClient,
+      store,
+      { userOrBotHandle: "binance_bot", watchlist: fakeBotWatchlist },
+      { now: new Date("2026-05-14T00:00:00Z") },
+    );
+
+    // Binance is exchange-category, not wallet/validator — generic
+    // impersonation fires but the specialised rules do not.
+    expect(ruleIds(result.findings)).toContain("TELEGRAM_HANDLE_IMPERSONATES_PROJECT");
+    expect(ruleIds(result.findings)).not.toContain("TELEGRAM_FAKE_WALLET_BOT");
+    expect(ruleIds(result.findings)).not.toContain("TELEGRAM_FAKE_VALIDATOR_BOT");
+  });
+});

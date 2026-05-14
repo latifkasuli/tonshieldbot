@@ -203,6 +203,7 @@ export interface BrandWatchlistEntry {
     | "mini_app_platform"
     | "infra"
     | "marketplace"
+    | "validator"
     | "other";
   readonly matchKeys: readonly string[];
   readonly legitimateHandles: readonly string[];

@@ -503,6 +503,28 @@ export const coreRules = [
       "Be sceptical of `cheap Stars` offers. Buy Stars only at Telegram's in-app price.",
     defaultScoreDelta: 25,
   },
+  {
+    id: "TELEGRAM_FAKE_WALLET_BOT",
+    category: "telegram",
+    severity: "critical",
+    title: "Bot handle impersonates a wallet brand",
+    description:
+      "A bot-shaped Telegram handle (Telegram requires bot usernames to end in `bot`, or the resolved entity self-reports as a bot) matches a known wallet brand on the watchlist. Fake wallet bots are a top-tier theft vector — they ask victims to paste seed phrases or `verify` their wallet by sending tokens, then immediately drain. The generic `TELEGRAM_HANDLE_IMPERSONATES_PROJECT` rule fires alongside this one; the wallet-bot specialisation lifts severity because the harm pattern is direct, automated, and irreversible.",
+    recommendation:
+      "Do not interact with this bot, do not paste any seed phrase / login code / private key, and do not authorise any wallet connection it requests. The legitimate wallet's authentic Telegram surface (if any) is published on the wallet's official website — verify directly there. Block and report the bot from inside Telegram.",
+    defaultScoreDelta: 80,
+  },
+  {
+    id: "TELEGRAM_FAKE_VALIDATOR_BOT",
+    category: "telegram",
+    severity: "high",
+    title: "Bot handle impersonates a TON validator / staking brand",
+    description:
+      "A bot-shaped Telegram handle matches a TON validator or staking service on the watchlist. Fake validator bots commonly drive off-protocol staking flows — the user is told to send TON to a wallet address `to stake`, with no validator actually receiving the funds. The generic impersonation rule fires alongside; this rule lifts severity because staking-bot impersonation is a documented high-loss vector.",
+    recommendation:
+      "Do not stake through this bot. Stake only through the validator's official website or in-app flow you reached from that site; never via a TON transfer to an address pasted in a Telegram chat.",
+    defaultScoreDelta: 45,
+  },
 ] as const satisfies readonly RuleDefinition[];
 
 export type CoreRuleId = (typeof coreRules)[number]["id"];

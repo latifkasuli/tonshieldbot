@@ -49,7 +49,15 @@ const handleShapeSchema = z
 
 const entrySchema = z.object({
   brand: z.string().trim().min(1),
-  category: z.enum(["wallet", "exchange", "mini_app_platform", "infra", "marketplace", "other"]),
+  category: z.enum([
+    "wallet",
+    "exchange",
+    "mini_app_platform",
+    "infra",
+    "marketplace",
+    "validator",
+    "other",
+  ]),
   matchKeys: z.array(handleShapeSchema).min(1),
   legitimateHandles: z.array(handleShapeSchema).default([]),
   notes: z.string().optional(),
