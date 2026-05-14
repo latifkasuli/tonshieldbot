@@ -199,6 +199,7 @@ export const scanTelegramEntity = async (
 
   return mergeResults(
     inputHandleFindings,
+    inputFakeBotFindings,
     mapNonOkResolverResult(
       result,
       input.channelOrSupergroupHandle !== undefined

@@ -887,6 +887,32 @@ describe("scanTelegramEntity — fake wallet bot (PR-33)", () => {
     expect(ruleIds(result.findings)).toContain("TELEGRAM_FAKE_WALLET_BOT");
     expect(ruleIds(result.findings)).toContain("TELEGRAM_BOT_API_NOT_CONFIGURED");
   });
+
+  it("survives a channel/supergroup-routed handle that fails to resolve (plain t.me/<bot> URL path)", async () => {
+    // basic-scan routes plain `t.me/<handle>` as `channelOrSupergroupHandle`
+    // because the classifier can't tell statically whether the handle is a
+    // channel, user, or bot. If `getChat` returns not_resolvable, the
+    // entity scanner must still surface the fake-bot finding from the
+    // pasted handle — otherwise a real user pasting
+    // `https://t.me/tonkeeper_support_bot` would see only the generic
+    // impersonation rule and lose the critical wallet-bot signal.
+    mockedResolveChannel.mockResolvedValue({
+      status: "not_resolvable",
+      reason: "channel_or_supergroup_not_found",
+      description: null,
+    });
+
+    const result = await scanTelegramEntity(
+      enabledClient,
+      store,
+      { channelOrSupergroupHandle: "tonkeeper_support_bot", watchlist: fakeBotWatchlist },
+      { now: new Date("2026-05-14T00:00:00Z") },
+    );
+
+    expect(ruleIds(result.findings)).toContain("TELEGRAM_FAKE_WALLET_BOT");
+    expect(ruleIds(result.findings)).toContain("TELEGRAM_HANDLE_IMPERSONATES_PROJECT");
+    expect(ruleIds(result.findings)).toContain("TELEGRAM_ENTITY_NOT_RESOLVABLE");
+  });
 });
 
 describe("scanTelegramEntity — fake validator bot (PR-33)", () => {
