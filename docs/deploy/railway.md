@@ -46,9 +46,12 @@ The web app (`apps/web`) is not deployed yet — it's still a placeholder landin
      - `TELEGRAM_INTEL_BOT_TOKEN` (same value as the API's; without it the worker logs `gift_catalog_refresh_skipped_disabled` and never populates the catalog)
    - Optional:
      - `GIFT_CATALOG_REFRESH_INTERVAL_MS` (default `3600000` = 1h; min 60s, max 24h)
+     - `SNAPSHOT_RETENTION_DAYS` (default `365`; min 1, max 3650 — per design doc decision #9, public-entity snapshots retained for one year)
+     - `SNAPSHOT_RETENTION_INTERVAL_MS` (default `86400000` = 24h; min 60s, max 7d)
+     - `SNAPSHOT_RETENTION_MAX_ROWS_PER_RUN` (default `100000`; min 1, max 1000000 — bounds delete blast radius if retention is misconfigured)
      - `TELEGRAM_API_BASE_URL` (override only when self-hosting a local Bot API server)
      - `NODE_ENV=production`
-   - Not used by the worker: `REDIS_URL`, `PORT` — the refresh job is a single periodic `setInterval` and exposes no HTTP surface.
+   - Not used by the worker: `REDIS_URL`, `PORT` — the worker runs periodic `setInterval`-driven jobs and exposes no HTTP surface.
 6. Database migrations run automatically before each API, Bot, and Worker deployment via each service's Railway `preDeployCommand`:
 
    ```sh
@@ -89,7 +92,7 @@ Running TypeScript directly with `tsx` is acceptable for this stage. A future ha
 
 - **API**: `GET /health` returns `{ ok: true, service: "tonshield-api" }`. Configured in `apps/api/railway.toml` with a 30s timeout.
 - **Bot**: long-polling, no HTTP server. Railway falls back to process liveness as the health signal. No healthcheck path needed.
-- **Worker**: no HTTP server, same liveness-only posture as the bot. Logs are the operational signal — search Railway's log viewer for `gift_catalog_refreshed` (success) or `gift_catalog_refresh_failed` (degraded).
+- **Worker**: no HTTP server, same liveness-only posture as the bot. Logs are the operational signal — search Railway's log viewer for `gift_catalog_refreshed` (success) or `gift_catalog_refresh_failed` (degraded). Snapshot retention emits `snapshot_retention_run` with `deleted_count` + `capped` (true when the per-run cap was hit and the next tick will pick up the rest).
 
 ## Updating env vars
 

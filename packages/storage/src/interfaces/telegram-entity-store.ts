@@ -125,4 +125,25 @@ export interface TelegramEntityStore {
    * Useful for evidence on `TELEGRAM_USERNAME_RECENTLY_CHANGED` findings.
    */
   usernameHistory(entityId: bigint): Promise<readonly UsernameBinding[]>;
+
+  /**
+   * Delete snapshots whose `observed_at` is strictly older than `cutoff`.
+   * Returns the number of rows actually deleted. The `entities` row is
+   * left in place — it's tiny and carries no PII, and keeping it lets a
+   * future revisit of the same entity preserve `firstSeenAt`.
+   *
+   * `maxRows` caps the work per call. If more rows are eligible than the
+   * cap, the impl deletes up to `maxRows` and stops; the next run will
+   * pick up the rest. The cap is the load-bearing safety on a
+   * misconfigured retention period — operators can set a tight retention
+   * for testing without nuking the entire history in one transaction.
+   *
+   * Design doc decision #9: 365-day retention for public-entity
+   * snapshots is the default operational policy; the actual cutoff is
+   * decided by the caller (the worker's retention loop).
+   */
+  pruneSnapshots(options: {
+    readonly cutoff: Date;
+    readonly maxRows: number;
+  }): Promise<{ readonly deletedCount: number }>;
 }

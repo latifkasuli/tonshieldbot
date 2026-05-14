@@ -184,3 +184,96 @@ describe("in-memory TelegramEntityStore — findEntityByUsername", () => {
     expect(await store.findEntityByUsername("newhandle")).toMatchObject({ id: 12345n });
   });
 });
+
+describe("in-memory TelegramEntityStore — pruneSnapshots (PR-34)", () => {
+  it("deletes snapshots strictly older than the cutoff", async () => {
+    const store = createInMemoryTelegramEntityStore();
+    await store.recordSnapshot(
+      baseInput({ entityId: 1n, observedAt: new Date("2024-01-01T00:00:00Z") }),
+    );
+    await store.recordSnapshot(
+      baseInput({ entityId: 1n, observedAt: new Date("2024-06-01T00:00:00Z") }),
+    );
+    await store.recordSnapshot(
+      baseInput({ entityId: 1n, observedAt: new Date("2025-12-01T00:00:00Z") }),
+    );
+
+    const result = await store.pruneSnapshots({
+      cutoff: new Date("2025-01-01T00:00:00Z"),
+      maxRows: 100,
+    });
+
+    expect(result.deletedCount).toBe(2);
+    const remaining = await store.recentSnapshots(1n, 10);
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0]?.observedAt.toISOString()).toBe("2025-12-01T00:00:00.000Z");
+  });
+
+  it("respects the maxRows cap and deletes oldest first", async () => {
+    const store = createInMemoryTelegramEntityStore();
+    for (let i = 0; i < 5; i++) {
+      await store.recordSnapshot(
+        baseInput({
+          entityId: 1n,
+          username: `u${String(i)}`,
+          observedAt: new Date(`2024-0${String(i + 1)}-01T00:00:00Z`),
+        }),
+      );
+    }
+
+    const result = await store.pruneSnapshots({
+      cutoff: new Date("2026-01-01T00:00:00Z"),
+      maxRows: 2,
+    });
+
+    expect(result.deletedCount).toBe(2);
+    const remaining = await store.recentSnapshots(1n, 10);
+    expect(remaining).toHaveLength(3);
+    const oldestRemaining = remaining[remaining.length - 1];
+    expect(oldestRemaining?.observedAt.toISOString()).toBe("2024-03-01T00:00:00.000Z");
+  });
+
+  it("returns deletedCount=0 and no-ops when maxRows is 0", async () => {
+    const store = createInMemoryTelegramEntityStore();
+    await store.recordSnapshot(baseInput());
+    const result = await store.pruneSnapshots({
+      cutoff: new Date("2099-01-01T00:00:00Z"),
+      maxRows: 0,
+    });
+    expect(result.deletedCount).toBe(0);
+    expect(await store.recentSnapshots(12345n, 10)).toHaveLength(1);
+  });
+
+  it("returns deletedCount=0 when nothing is older than the cutoff", async () => {
+    const store = createInMemoryTelegramEntityStore();
+    await store.recordSnapshot(baseInput({ observedAt: new Date("2026-05-14T00:00:00Z") }));
+    const result = await store.pruneSnapshots({
+      cutoff: new Date("2024-01-01T00:00:00Z"),
+      maxRows: 100,
+    });
+    expect(result.deletedCount).toBe(0);
+  });
+
+  it("prunes across multiple entities, oldest-first globally", async () => {
+    const store = createInMemoryTelegramEntityStore();
+    await store.recordSnapshot(
+      baseInput({ entityId: 1n, observedAt: new Date("2024-01-01T00:00:00Z") }),
+    );
+    await store.recordSnapshot(
+      baseInput({ entityId: 2n, observedAt: new Date("2023-12-01T00:00:00Z") }),
+    );
+    await store.recordSnapshot(
+      baseInput({ entityId: 3n, observedAt: new Date("2024-06-01T00:00:00Z") }),
+    );
+
+    // Cap of 1 — the very oldest (entity 2's 2023-12 row) should go.
+    const result = await store.pruneSnapshots({
+      cutoff: new Date("2025-01-01T00:00:00Z"),
+      maxRows: 1,
+    });
+    expect(result.deletedCount).toBe(1);
+    expect(await store.recentSnapshots(2n, 10)).toHaveLength(0);
+    expect(await store.recentSnapshots(1n, 10)).toHaveLength(1);
+    expect(await store.recentSnapshots(3n, 10)).toHaveLength(1);
+  });
+});
