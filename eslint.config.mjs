@@ -6,6 +6,7 @@ export default tseslint.config(
     ignores: [
       "coverage/**",
       "dist/**",
+      "**/dist/**",
       "node_modules/**",
       ".claude/**",
       ".claire/**",
@@ -14,6 +15,11 @@ export default tseslint.config(
       "apps/web/dist/**",
       "eslint.config.mjs",
       "pnpm-lock.yaml",
+      // Build tooling: plain Node ESM scripts, not part of the
+      // TypeScript project graph. Project-service lint would require
+      // them to be in `include`, but adding `.mjs` to the strict TS
+      // tsconfig opens a different can of worms.
+      "scripts/**",
     ],
   },
   js.configs.recommended,

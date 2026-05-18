@@ -9,6 +9,10 @@
 
 [build]
 builder = "RAILPACK"
+# Compile the app to a single ESM bundle. `start` then runs
+# `node --enable-source-maps dist/index.js` (per the app's `start`
+# script in package.json) — no `tsx` at runtime, faster cold start.
+buildCommand = "pnpm --filter @tonshield/api build"
 
 [deploy]
 preDeployCommand = ["pnpm --filter @tonshield/storage migrate:apply"]
