@@ -13,6 +13,9 @@
 
 [build]
 builder = "RAILPACK"
+# Compile the worker to a single ESM bundle. `start` then runs
+# `node --enable-source-maps dist/index.js` — no `tsx` at runtime.
+buildCommand = "pnpm --filter @tonshield/worker build"
 
 [deploy]
 preDeployCommand = ["pnpm --filter @tonshield/storage migrate:apply"]

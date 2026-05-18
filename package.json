@@ -13,6 +13,10 @@
     "dev:api": "pnpm --filter @tonshield/api dev",
     "dev:bot": "pnpm --filter @tonshield/bot dev",
     "dev:web": "pnpm --filter @tonshield/web dev",
+    "build": "pnpm --filter @tonshield/api --filter @tonshield/bot --filter @tonshield/worker build",
+    "build:api": "pnpm --filter @tonshield/api build",
+    "build:bot": "pnpm --filter @tonshield/bot build",
+    "build:worker": "pnpm --filter @tonshield/worker build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint .",
     "format": "prettier --check .",
@@ -25,6 +29,7 @@
     "@eslint/js": "^10.0.1",
     "@types/node": "^24.12.2",
     "@vitejs/plugin-react": "^6.0.1",
+    "esbuild": "^0.28.0",
     "eslint": "^10.3.0",
     "prettier": "^3.8.3",
     "tsx": "^4.21.0",
@@ -32,5 +37,10 @@
     "typescript-eslint": "^8.59.2",
     "vite": "^8.0.11",
     "vitest": "^4.1.5"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   }
 }

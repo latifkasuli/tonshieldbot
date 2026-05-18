@@ -78,15 +78,17 @@ The web app (`apps/web`) is not deployed yet — it's still a placeholder landin
 
 ## Build and start
 
-All Node services use Railway's default Railpack builder. Railpack reads `packageManager` and `engines.node` from the root `package.json` to pick pnpm 10.15.1 and Node 24. The default install phase runs `pnpm install --frozen-lockfile` at the repo root, so all workspace packages and devDependencies (including `tsx`) are available.
+All Node services use Railway's default Railpack builder. Railpack reads `packageManager` and `engines.node` from the root `package.json` to pick pnpm 10.15.1 and Node 24. The default install phase runs `pnpm install --frozen-lockfile` at the repo root, so all workspace packages and devDependencies (including `esbuild` and `tsx`) are available.
 
-Start commands are explicit in each `railway.toml`:
+Each service's `railway.toml` declares an explicit `buildCommand` and `startCommand`:
 
-- API: `pnpm --filter @tonshield/api start` → `tsx src/index.ts`
-- Bot: `pnpm --filter @tonshield/bot start` → `tsx src/index.ts`
-- Worker: `pnpm --filter @tonshield/worker start` → `tsx src/index.ts`
+- API: build → `pnpm --filter @tonshield/api build`, start → `pnpm --filter @tonshield/api start` (`node --enable-source-maps dist/index.js`)
+- Bot: build → `pnpm --filter @tonshield/bot build`, start → `pnpm --filter @tonshield/bot start`
+- Worker: build → `pnpm --filter @tonshield/worker build`, start → `pnpm --filter @tonshield/worker start`
 
-Running TypeScript directly with `tsx` is acceptable for this stage. A future hardening PR will add a build step that emits `.js` and starts with plain `node` for faster cold start and a slimmer image.
+The build step invokes a small esbuild script ([scripts/build-app.mjs](../../scripts/build-app.mjs)) that produces a single self-contained ESM bundle at `apps/<app>/dist/index.js` plus a sourcemap. `@tonshield/*` workspace source is inlined into the bundle; npm runtime deps are also bundled (so the production container doesn't need to resolve pnpm symlinks under `apps/<app>/node_modules`), with a `createRequire` banner so CJS packages like `pino` and `drizzle-orm` work inside the ESM output.
+
+The runtime container runs plain `node` against the bundle — no `tsx` in the hot path. `tsx` stays in devDependencies for `pnpm dev` and for the migration script (`pnpm --filter @tonshield/storage migrate:apply`).
 
 ## Healthchecks
 
@@ -113,6 +115,7 @@ Operational notes:
 ## Troubleshooting
 
 - **Build fails with "no lockfile"**: confirm _Root Directory_ is `/`, not `apps/api`. Railpack needs the repo-root `pnpm-lock.yaml` for `--frozen-lockfile`.
+- **Build fails with `Cannot find module '@esbuild/<platform>'`**: pnpm 10 skips esbuild's postinstall by default; the root `package.json` allows it via `pnpm.onlyBuiltDependencies`. If you forked the workspace and rewrote that field, re-add esbuild there.
+- **`dist/index.js` not found at start**: the build step didn't run, or it ran in a different image than start. Verify the service's `buildCommand` in Railway matches the value in `railway.toml`.
 - **API starts but Railway shows the service as unhealthy**: confirm the service is listening on `0.0.0.0` (not `127.0.0.1`) and that `PORT` is being honored. The current `loadApiConfig` reads `API_PORT > PORT > 3000`.
 - **Bot crashes on startup with `BOT_TOKEN` missing**: the bot validates env via zod at startup; check the Railway service env vars.
-- **`tsx` not found at runtime**: Railway should install devDependencies for this first staging setup. If that changes, move `tsx` from devDependencies to dependencies or ship the compiled-JS start path.
