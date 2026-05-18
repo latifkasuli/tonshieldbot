@@ -68,19 +68,41 @@ export const classifyTonApiFailure = (error: unknown): TonApiFailure => {
   return { status: "failed", httpStatus };
 };
 
+/**
+ * Pull the HTTP status off whatever error shape TONAPI's SDK throws.
+ *
+ * Two shapes observed in the wild:
+ *
+ *   1. `{ status: number }` — what a hand-rolled mock or older SDK
+ *      version would surface. Tests use this shape.
+ *   2. `new Error(message, { cause: response })` — what
+ *      `@ton-api/client@0.4` actually throws. The HTTP status lives on
+ *      `error.cause.status` (the `cause` is the Fetch API `Response`
+ *      object). This was the production crash path that pre-fix made
+ *      every Telegram-handle scan emit a spurious
+ *      `TELEGRAM_FRAGMENT_API_UNAVAILABLE` — a clean 404 (handle isn't
+ *      a Fragment username) looked indistinguishable from a network
+ *      failure because `error.status` was `undefined`.
+ *
+ * We check both. If neither carries a numeric status, we treat the
+ * error as a transport-layer failure (provider_down with httpStatus
+ * null), which is the right posture for genuine network drops.
+ */
 const extractHttpStatus = (error: unknown): number | null => {
   if (typeof error !== "object" || error === null) {
     return null;
   }
-  const candidate = (error as { status?: unknown }).status;
-  return typeof candidate === "number" ? candidate : null;
+  const direct = (error as { status?: unknown }).status;
+  if (typeof direct === "number") return direct;
+  const cause = (error as { cause?: unknown }).cause;
+  if (typeof cause === "object" && cause !== null) {
+    const causeStatus = (cause as { status?: unknown }).status;
+    if (typeof causeStatus === "number") return causeStatus;
+  }
+  return null;
 };
 
-const isNotFoundShape = (error: unknown): boolean => {
-  if (typeof error !== "object" || error === null) return false;
-  const status = (error as { status?: unknown }).status;
-  return status === 404;
-};
+const isNotFoundShape = (error: unknown): boolean => extractHttpStatus(error) === 404;
 
 const notFoundDescription = (error: unknown): string => {
   if (typeof error === "object" && error !== null) {
