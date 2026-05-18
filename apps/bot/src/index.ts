@@ -49,6 +49,7 @@ bot.on("message:text", async (ctx) => {
   const cacheable = isScanResultCacheable(classified, {
     emulatorEnabled: deps.emulator.enabled,
     telegramIntelEnabled: deps.telegramIntel.enabled,
+    fragmentEnabled: deps.fragment.enabled,
   });
   const cached = cacheable ? await deps.storage.reports.findByInputHash(inputHash) : null;
 

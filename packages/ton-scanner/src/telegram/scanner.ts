@@ -21,7 +21,7 @@ import {
 } from "@tonshield/telegram-intel";
 import type { FragmentIntelClient, OwnershipCache } from "@tonshield/fragment-intel";
 import type { GiftCatalogStore, TelegramEntityStore } from "@tonshield/storage";
-import { checkFragmentHandoff } from "./fragment-handoff.ts";
+import { checkFragmentHandoffForCandidates } from "./fragment-handoff.ts";
 import { scanChatGiftsForUnknownPublisher } from "./gift-publisher-scanner.ts";
 
 export interface TelegramScanResult {
@@ -117,16 +117,23 @@ export const scanTelegramEntity = async (
   const inputHandleFindings = checkCandidateHandle(pastedHandle, watchlist);
   const inputFakeBotFindings = checkSensitiveBotCategory(pastedHandle, null, watchlist);
 
-  // PR-36: Fragment on-chain ownership lookup. Fires
-  // `TELEGRAM_USERNAME_FRAGMENT_HANDOFF` when the username NFT
-  // changed owners recently; degrades to info / low health findings
-  // when the client is missing or TONAPI is unreachable. Independent
-  // of Bot API status — runs even when Telegram resolution fails.
-  const fragmentFindings = await checkFragmentHandoff(options.fragment, pastedHandle, {
-    ...(options.fragmentCache === undefined ? {} : { cache: options.fragmentCache }),
-    ...(options.now === undefined ? {} : { now: () => options.now ?? new Date() }),
+  // PR-36: Fragment on-chain ownership lookup. Per blocker on PR-36
+  // review: the lookup must consider BOTH the pasted handle AND the
+  // resolved/forwarded entity's canonical username — the user pastes
+  // `@alias` but Fragment owns `@real`, OR a forwarded message carries
+  // an entity.username we never had on the input side. Each branch
+  // builds the candidate list it has access to and the multi-candidate
+  // helper dedupes health findings (`FRAGMENT_API_NOT_CONFIGURED` /
+  // `_UNAVAILABLE` emit at most once per scan).
+  const runFragment = async (
+    candidates: readonly (string | null | undefined)[],
+  ): Promise<TelegramScanResult> => ({
+    findings: await checkFragmentHandoffForCandidates(options.fragment, candidates, {
+      ...(options.fragmentCache === undefined ? {} : { cache: options.fragmentCache }),
+      ...(options.now === undefined ? {} : { now: () => options.now ?? new Date() }),
+    }),
+    actions: [],
   });
-  const fragmentScan: TelegramScanResult = { findings: fragmentFindings, actions: [] };
 
   // ── Forwarded-origin user/bot — no Bot API call needed ────────────────
   if (input.forwardOriginUser !== undefined) {
@@ -139,6 +146,11 @@ export const scanTelegramEntity = async (
     );
     const impersonation = checkResolvedEntity(input.forwardOriginUser, watchlist);
     const fakeBot = checkSensitiveBotCategory(pastedHandle, input.forwardOriginUser, watchlist);
+    // Forwarded path: pastedHandle is typically null (the user forwarded
+    // a message rather than pasting a handle), but the forwardOriginUser
+    // CAN carry a username. Feed both so the Fragment lookup runs even
+    // for forward-only inputs.
+    const fragmentScan = await runFragment([pastedHandle, input.forwardOriginUser.username]);
     const merged = mergeResults(
       inputHandleFindings,
       inputFakeBotFindings,
@@ -155,7 +167,7 @@ export const scanTelegramEntity = async (
     return mergeResults(
       inputHandleFindings,
       inputFakeBotFindings,
-      fragmentScan,
+      await runFragment([pastedHandle]),
       single(emulationFinding("TELEGRAM_BOT_API_NOT_CONFIGURED")),
     );
   }
@@ -166,7 +178,7 @@ export const scanTelegramEntity = async (
     return mergeResults(
       inputHandleFindings,
       inputFakeBotFindings,
-      fragmentScan,
+      await runFragment([pastedHandle]),
       mapNonOkResolverResult(result, "user_or_bot_handle_requires_prior_context"),
     );
   }
@@ -183,7 +195,7 @@ export const scanTelegramEntity = async (
     return mergeResults(
       inputHandleFindings,
       inputFakeBotFindings,
-      fragmentScan,
+      await runFragment([pastedHandle]),
       single(
         createFinding({
           confidence: "low",
@@ -198,6 +210,10 @@ export const scanTelegramEntity = async (
     const downstream = await snapshotAndDiff(store, result.entity, "getChat", now, cooldownMs);
     const impersonation = checkResolvedEntity(result.entity, watchlist);
     const fakeBot = checkSensitiveBotCategory(pastedHandle, result.entity, watchlist);
+    // Resolved entity exposes its canonical username; feed it alongside
+    // any pasted handle so alias-resolution cases (`@alias` resolves to
+    // `@real`) still trigger the handoff check.
+    const fragmentScan = await runFragment([pastedHandle, result.entity.username]);
     const merged = mergeResults(
       inputHandleFindings,
       inputFakeBotFindings,
@@ -235,7 +251,7 @@ export const scanTelegramEntity = async (
   return mergeResults(
     inputHandleFindings,
     inputFakeBotFindings,
-    fragmentScan,
+    await runFragment([pastedHandle]),
     mapNonOkResolverResult(
       result,
       input.channelOrSupergroupHandle !== undefined

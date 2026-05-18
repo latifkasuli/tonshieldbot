@@ -153,6 +153,7 @@ export const createApiServer = (
     const cacheable = isScanResultCacheable(classified, {
       emulatorEnabled: options.emulator.enabled,
       telegramIntelEnabled: options.telegramIntel.enabled,
+      fragmentEnabled: options.fragment.enabled,
     });
     const cached = cacheable ? await options.reports.findByInputHash(inputHash) : null;
 

@@ -135,3 +135,52 @@ const healthFinding = (
     evidence: {},
     rule: getCoreRule(ruleId),
   });
+
+/**
+ * Multi-candidate variant. A single scan can carry several usernames the
+ * Fragment lookup should consider — the pasted handle (`@scammer`) AND
+ * the resolved entity's canonical username (`@brand`). Running the
+ * single-candidate `checkFragmentHandoff` once per candidate and naive-
+ * concatenating findings would emit `TELEGRAM_FRAGMENT_API_NOT_CONFIGURED`
+ * twice for a disabled client. This helper dedupes health findings to
+ * one per scan while preserving any handoff findings (different
+ * usernames legitimately produce different evidence).
+ *
+ * Candidates are normalised (`@` stripped, lower-cased, trimmed) and
+ * deduplicated before lookup. `null` / empty / non-username-shape
+ * candidates are dropped early.
+ */
+export const checkFragmentHandoffForCandidates = async (
+  client: FragmentIntelClient | undefined,
+  candidates: readonly (string | null | undefined)[],
+  options: FragmentHandoffOptions = {},
+): Promise<readonly RiskFinding[]> => {
+  const seen = new Set<string>();
+  const normalised: string[] = [];
+  for (const candidate of candidates) {
+    if (candidate === null || candidate === undefined) continue;
+    const cleaned = candidate.replace(/^@/, "").trim().toLowerCase();
+    if (cleaned.length === 0 || seen.has(cleaned)) continue;
+    seen.add(cleaned);
+    normalised.push(cleaned);
+  }
+
+  if (normalised.length === 0) return [];
+
+  const out: RiskFinding[] = [];
+  const seenHealthRules = new Set<string>();
+  for (const username of normalised) {
+    const findings = await checkFragmentHandoff(client, username, options);
+    for (const finding of findings) {
+      if (
+        finding.ruleId === "TELEGRAM_FRAGMENT_API_NOT_CONFIGURED" ||
+        finding.ruleId === "TELEGRAM_FRAGMENT_API_UNAVAILABLE"
+      ) {
+        if (seenHealthRules.has(finding.ruleId)) continue;
+        seenHealthRules.add(finding.ruleId);
+      }
+      out.push(finding);
+    }
+  }
+  return out;
+};
