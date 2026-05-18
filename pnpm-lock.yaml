@@ -50,6 +50,9 @@ importers:
       '@tonshield/api-auth':
         specifier: workspace:*
         version: link:../../packages/api-auth
+      '@tonshield/fragment-intel':
+        specifier: workspace:*
+        version: link:../../packages/fragment-intel
       '@tonshield/logger':
         specifier: workspace:*
         version: link:../../packages/logger
@@ -89,6 +92,9 @@ importers:
 
   apps/bot:
     dependencies:
+      '@tonshield/fragment-intel':
+        specifier: workspace:*
+        version: link:../../packages/fragment-intel
       '@tonshield/logger':
         specifier: workspace:*
         version: link:../../packages/logger
@@ -183,6 +189,18 @@ importers:
       hono:
         specifier: ^4.12.18
         version: 4.12.18
+
+  packages/fragment-intel:
+    dependencies:
+      '@ton-api/client':
+        specifier: ^0.4.0
+        version: 0.4.0(@ton/core@0.63.1(@ton/crypto@3.3.0))
+      '@tonshield/shared':
+        specifier: workspace:*
+        version: link:../shared
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
 
   packages/logger:
     dependencies:
@@ -300,6 +318,9 @@ importers:
       '@ton/ton':
         specifier: ^16.2.4
         version: 16.2.4(@ton/core@0.63.1(@ton/crypto@3.3.0))(@ton/crypto@3.3.0)
+      '@tonshield/fragment-intel':
+        specifier: workspace:*
+        version: link:../fragment-intel
       '@tonshield/risk-engine':
         specifier: workspace:*
         version: link:../risk-engine

@@ -14,6 +14,8 @@ const app = createApiServer({
   telegramIntel: deps.telegramIntel,
   telegramEntities: deps.storage.telegramEntities,
   telegramGiftCatalog: deps.storage.telegramGiftCatalog,
+  fragment: deps.fragment,
+  fragmentCache: deps.fragmentCache,
 });
 
 serve(

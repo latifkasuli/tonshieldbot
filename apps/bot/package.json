@@ -10,6 +10,7 @@
     "typecheck": "tsc -p ../../tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@tonshield/fragment-intel": "workspace:*",
     "@tonshield/logger": "workspace:*",
     "@tonshield/rate-limit": "workspace:*",
     "@tonshield/risk-engine": "workspace:*",

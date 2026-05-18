@@ -67,6 +67,8 @@ bot.on("message:text", async (ctx) => {
       telegramIntel: deps.telegramIntel,
       telegramEntities: deps.storage.telegramEntities,
       telegramGiftCatalog: deps.storage.telegramGiftCatalog,
+      fragment: deps.fragment,
+      fragmentCache: deps.fragmentCache,
       rawInput,
     });
     // `ReportStore.save()` is dedup-aware and returns the existing row on

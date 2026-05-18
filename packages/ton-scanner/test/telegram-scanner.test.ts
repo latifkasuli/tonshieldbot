@@ -73,7 +73,7 @@ describe("scanTelegramEntity degradation paths", () => {
       channelOrSupergroupHandle: "exampleproject",
     });
 
-    expect(ruleIds(result.findings)).toEqual(["TELEGRAM_BOT_API_NOT_CONFIGURED"]);
+    expect(ruleIds(result.findings)).toContain("TELEGRAM_BOT_API_NOT_CONFIGURED");
     expect(mockedResolveChannel).not.toHaveBeenCalled();
   });
 
@@ -82,7 +82,7 @@ describe("scanTelegramEntity degradation paths", () => {
       channelOrSupergroupHandle: "exampleproject",
     });
 
-    expect(ruleIds(result.findings)).toEqual(["TELEGRAM_BOT_API_NOT_CONFIGURED"]);
+    expect(ruleIds(result.findings)).toContain("TELEGRAM_BOT_API_NOT_CONFIGURED");
   });
 });
 
@@ -104,8 +104,10 @@ describe("scanTelegramEntity — cold user/bot handle path", () => {
       userOrBotHandle: "somebot",
     });
 
-    expect(ruleIds(result.findings)).toEqual(["TELEGRAM_ENTITY_NOT_RESOLVABLE"]);
-    expect(result.findings[0]?.evidence).toMatchObject({
+    expect(ruleIds(result.findings)).toContain("TELEGRAM_ENTITY_NOT_RESOLVABLE");
+    expect(
+      result.findings.find((f) => f.ruleId === "TELEGRAM_ENTITY_NOT_RESOLVABLE")?.evidence,
+    ).toMatchObject({
       reason: "user_or_bot_handle_requires_prior_context",
     });
   });
@@ -124,7 +126,12 @@ describe("scanTelegramEntity — channel/supergroup snapshot path", () => {
       { now: new Date("2026-05-10T00:00:00Z") },
     );
 
-    expect(result.findings).toEqual([]);
+    // PR-36 added the Fragment health info finding; the original
+    // "no impersonation / no diff" expectation still holds for everything
+    // outside that subsystem.
+    expect(result.findings.filter((f) => !f.ruleId.startsWith("TELEGRAM_FRAGMENT_API_"))).toEqual(
+      [],
+    );
     const latest = await store.latestSnapshot(100200300n);
     expect(latest?.username).toBe("exampleproject");
     expect(latest?.source).toBe("getChat");
@@ -170,8 +177,10 @@ describe("scanTelegramEntity — channel/supergroup snapshot path", () => {
       { now: new Date("2026-05-11T00:00:00Z") },
     );
 
-    expect(ruleIds(result.findings)).toEqual(["TELEGRAM_USERNAME_RECENTLY_CHANGED"]);
-    expect(result.findings[0]?.evidence).toMatchObject({
+    expect(ruleIds(result.findings)).toContain("TELEGRAM_USERNAME_RECENTLY_CHANGED");
+    expect(
+      result.findings.find((f) => f.ruleId === "TELEGRAM_USERNAME_RECENTLY_CHANGED")?.evidence,
+    ).toMatchObject({
       entityId: "100200300",
       previousUsername: "exampleproject",
       currentUsername: "scammer",
@@ -202,8 +211,10 @@ describe("scanTelegramEntity — channel/supergroup snapshot path", () => {
       channelOrSupergroupHandle: "doesnotexist",
     });
 
-    expect(ruleIds(result.findings)).toEqual(["TELEGRAM_ENTITY_NOT_RESOLVABLE"]);
-    expect(result.findings[0]?.evidence).toMatchObject({
+    expect(ruleIds(result.findings)).toContain("TELEGRAM_ENTITY_NOT_RESOLVABLE");
+    expect(
+      result.findings.find((f) => f.ruleId === "TELEGRAM_ENTITY_NOT_RESOLVABLE")?.evidence,
+    ).toMatchObject({
       reason: "channel_or_supergroup_not_found",
     });
   });
@@ -218,8 +229,10 @@ describe("scanTelegramEntity — channel/supergroup snapshot path", () => {
       channelOrSupergroupHandle: "exampleproject",
     });
 
-    expect(ruleIds(result.findings)).toEqual(["TELEGRAM_BOT_API_RATE_LIMITED"]);
-    expect(result.findings[0]?.evidence).toMatchObject({
+    expect(ruleIds(result.findings)).toContain("TELEGRAM_BOT_API_RATE_LIMITED");
+    expect(
+      result.findings.find((f) => f.ruleId === "TELEGRAM_BOT_API_RATE_LIMITED")?.evidence,
+    ).toMatchObject({
       httpStatus: 429,
       retryAfter: 5,
     });
@@ -251,7 +264,9 @@ describe("scanTelegramEntity — forwarded message path", () => {
       { now: new Date("2026-05-10T00:00:00Z") },
     );
 
-    expect(result.findings).toEqual([]);
+    expect(result.findings.filter((f) => !f.ruleId.startsWith("TELEGRAM_FRAGMENT_API_"))).toEqual(
+      [],
+    );
     expect(mockedResolveChannel).not.toHaveBeenCalled();
     expect(mockedResolveById).not.toHaveBeenCalled();
 
@@ -306,7 +321,7 @@ describe("scanTelegramEntity — forwarded message path", () => {
       { now: new Date("2026-05-11T00:00:00Z") },
     );
 
-    expect(ruleIds(result.findings)).toEqual(["TELEGRAM_USERNAME_RECENTLY_CHANGED"]);
+    expect(ruleIds(result.findings)).toContain("TELEGRAM_USERNAME_RECENTLY_CHANGED");
   });
 });
 

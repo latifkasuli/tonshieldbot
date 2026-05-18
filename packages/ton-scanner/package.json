@@ -10,6 +10,7 @@
     "@ton-api/client": "^0.4.0",
     "@ton/core": "^0.63.1",
     "@ton/ton": "^16.2.4",
+    "@tonshield/fragment-intel": "workspace:*",
     "@tonshield/risk-engine": "workspace:*",
     "@tonshield/safe-fetch": "workspace:*",
     "@tonshield/shared": "workspace:*",

@@ -9,6 +9,7 @@ import {
 } from "@tonshield/risk-engine";
 import type { ActionPreview, RiskFinding, ScanInput, ScanReport } from "@tonshield/shared";
 import type { FetchCache } from "@tonshield/safe-fetch";
+import type { FragmentIntelClient, OwnershipCache } from "@tonshield/fragment-intel";
 import type { GiftCatalogStore, TelegramEntityStore } from "@tonshield/storage";
 import type { TelegramIntelClient } from "@tonshield/telegram-intel";
 import type { TonEmulatorClient } from "@tonshield/ton-emulator";
@@ -60,6 +61,19 @@ export interface CreateBasicScanInput {
    * fires `TELEGRAM_GIFT_FROM_UNKNOWN_PUBLISHER` on mismatches.
    */
   readonly telegramGiftCatalog?: GiftCatalogStore;
+  /**
+   * Optional Fragment intel client for on-chain username NFT lookups
+   * (M3 PR-36). When wired, Telegram-handle scans pick up
+   * `TELEGRAM_USERNAME_FRAGMENT_HANDOFF` on recent owner transfers.
+   * Health degradation: emits `FRAGMENT_API_NOT_CONFIGURED` / `_UNAVAILABLE`
+   * when the client is absent / TONAPI is down.
+   */
+  readonly fragment?: FragmentIntelClient;
+  /**
+   * Shared TTL cache for Fragment lookups. Apps wire a process-wide
+   * cache so the same username isn't re-fetched across rapid scans.
+   */
+  readonly fragmentCache?: OwnershipCache;
 }
 
 interface GatherResult {
@@ -80,6 +94,8 @@ export const createBasicScan = async (input: CreateBasicScanInput): Promise<Scan
     ...(input.telegramGiftCatalog === undefined
       ? {}
       : { telegramGiftCatalog: input.telegramGiftCatalog }),
+    ...(input.fragment === undefined ? {} : { fragment: input.fragment }),
+    ...(input.fragmentCache === undefined ? {} : { fragmentCache: input.fragmentCache }),
     ...(input.now === undefined ? {} : { now: input.now }),
   };
   const { findings, actions } = await gatherScanResult(classifiedInput, deps);
@@ -107,6 +123,8 @@ interface GatherDeps {
   readonly telegramIntel?: TelegramIntelClient;
   readonly telegramEntities?: TelegramEntityStore;
   readonly telegramGiftCatalog?: GiftCatalogStore;
+  readonly fragment?: FragmentIntelClient;
+  readonly fragmentCache?: OwnershipCache;
   readonly now?: Date;
 }
 
@@ -257,6 +275,8 @@ const gatherScanResult = async (input: ScanInput, deps: GatherDeps): Promise<Gat
     const result = await scanTelegramEntity(deps.telegramIntel, deps.telegramEntities, scanInput, {
       ...(deps.now === undefined ? {} : { now: deps.now }),
       ...(deps.telegramGiftCatalog === undefined ? {} : { giftCatalog: deps.telegramGiftCatalog }),
+      ...(deps.fragment === undefined ? {} : { fragment: deps.fragment }),
+      ...(deps.fragmentCache === undefined ? {} : { fragmentCache: deps.fragmentCache }),
     });
     return {
       findings: [...businessResult.findings, ...result.findings],

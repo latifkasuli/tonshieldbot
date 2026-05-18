@@ -19,7 +19,9 @@ import {
   type TelegramIntelClient,
   type WatchlistMatch,
 } from "@tonshield/telegram-intel";
+import type { FragmentIntelClient, OwnershipCache } from "@tonshield/fragment-intel";
 import type { GiftCatalogStore, TelegramEntityStore } from "@tonshield/storage";
+import { checkFragmentHandoff } from "./fragment-handoff.ts";
 import { scanChatGiftsForUnknownPublisher } from "./gift-publisher-scanner.ts";
 
 export interface TelegramScanResult {
@@ -85,6 +87,22 @@ export const scanTelegramEntity = async (
      * a member of the chat (the common case for arbitrary scans).
      */
     readonly giftCatalog?: GiftCatalogStore;
+    /**
+     * Fragment intel client for on-chain username NFT lookups. When
+     * provided, the scanner runs `checkFragmentHandoff` against the
+     * pasted handle / resolved entity username and emits
+     * `TELEGRAM_USERNAME_FRAGMENT_HANDOFF` on recent ownership
+     * changes. `disabled` / failure outcomes degrade to info / low
+     * health findings (mirroring the emulator pattern).
+     */
+    readonly fragment?: FragmentIntelClient;
+    /**
+     * Optional shared cache for Fragment ownership lookups. When set,
+     * repeated lookups within a scan reuse the cached result instead
+     * of re-issuing TONAPI calls. Apps wire this from a process-wide
+     * `createOwnershipCache()`.
+     */
+    readonly fragmentCache?: OwnershipCache;
   } = {},
 ): Promise<TelegramScanResult> => {
   const now = options.now ?? new Date();
@@ -98,6 +116,17 @@ export const scanTelegramEntity = async (
   const pastedHandle = input.channelOrSupergroupHandle ?? input.userOrBotHandle ?? null;
   const inputHandleFindings = checkCandidateHandle(pastedHandle, watchlist);
   const inputFakeBotFindings = checkSensitiveBotCategory(pastedHandle, null, watchlist);
+
+  // PR-36: Fragment on-chain ownership lookup. Fires
+  // `TELEGRAM_USERNAME_FRAGMENT_HANDOFF` when the username NFT
+  // changed owners recently; degrades to info / low health findings
+  // when the client is missing or TONAPI is unreachable. Independent
+  // of Bot API status — runs even when Telegram resolution fails.
+  const fragmentFindings = await checkFragmentHandoff(options.fragment, pastedHandle, {
+    ...(options.fragmentCache === undefined ? {} : { cache: options.fragmentCache }),
+    ...(options.now === undefined ? {} : { now: () => options.now ?? new Date() }),
+  });
+  const fragmentScan: TelegramScanResult = { findings: fragmentFindings, actions: [] };
 
   // ── Forwarded-origin user/bot — no Bot API call needed ────────────────
   if (input.forwardOriginUser !== undefined) {
@@ -113,6 +142,7 @@ export const scanTelegramEntity = async (
     const merged = mergeResults(
       inputHandleFindings,
       inputFakeBotFindings,
+      fragmentScan,
       impersonation,
       fakeBot,
       downstream,
@@ -125,6 +155,7 @@ export const scanTelegramEntity = async (
     return mergeResults(
       inputHandleFindings,
       inputFakeBotFindings,
+      fragmentScan,
       single(emulationFinding("TELEGRAM_BOT_API_NOT_CONFIGURED")),
     );
   }
@@ -135,6 +166,7 @@ export const scanTelegramEntity = async (
     return mergeResults(
       inputHandleFindings,
       inputFakeBotFindings,
+      fragmentScan,
       mapNonOkResolverResult(result, "user_or_bot_handle_requires_prior_context"),
     );
   }
@@ -150,6 +182,8 @@ export const scanTelegramEntity = async (
     // error. Treat as not-resolvable with a generic reason.
     return mergeResults(
       inputHandleFindings,
+      inputFakeBotFindings,
+      fragmentScan,
       single(
         createFinding({
           confidence: "low",
@@ -167,6 +201,7 @@ export const scanTelegramEntity = async (
     const merged = mergeResults(
       inputHandleFindings,
       inputFakeBotFindings,
+      fragmentScan,
       impersonation,
       fakeBot,
       downstream,
@@ -200,6 +235,7 @@ export const scanTelegramEntity = async (
   return mergeResults(
     inputHandleFindings,
     inputFakeBotFindings,
+    fragmentScan,
     mapNonOkResolverResult(
       result,
       input.channelOrSupergroupHandle !== undefined

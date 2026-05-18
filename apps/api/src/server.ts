@@ -8,6 +8,7 @@ import type { Logger, LoggerVariables } from "@tonshield/logger";
 import { createHonoRateLimit, defaultTierLimits } from "@tonshield/rate-limit";
 import type { RateLimiter } from "@tonshield/rate-limit";
 import { TtlFetchCache } from "@tonshield/safe-fetch";
+import type { FragmentIntelClient, OwnershipCache } from "@tonshield/fragment-intel";
 import {
   canonicalInputHash,
   type ApiKeyStore,
@@ -57,6 +58,15 @@ export interface CreateApiServerOptions {
    * periodic `refreshGiftCatalog` job.
    */
   readonly telegramGiftCatalog: GiftCatalogStore;
+  /**
+   * Fragment intel client (PR-36) — on-chain username NFT lookups.
+   * Same fail-soft posture as the emulator: passed through
+   * unconditionally; `client.enabled === false` surfaces
+   * `FRAGMENT_API_NOT_CONFIGURED`.
+   */
+  readonly fragment: FragmentIntelClient;
+  /** Process-wide TTL cache for Fragment lookups. */
+  readonly fragmentCache: OwnershipCache;
 }
 
 /**
@@ -161,6 +171,8 @@ export const createApiServer = (
       telegramIntel: options.telegramIntel,
       telegramEntities: options.telegramEntities,
       telegramGiftCatalog: options.telegramGiftCatalog,
+      fragment: options.fragment,
+      fragmentCache: options.fragmentCache,
       rawInput: body.data.input,
     });
     // `ReportStore.save()` is dedup-aware: on input-hash conflict it
