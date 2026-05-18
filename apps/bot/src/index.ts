@@ -1,4 +1,5 @@
-import { Bot } from "grammy";
+import { setDefaultResultOrder } from "node:dns";
+import { Bot, GrammyError, HttpError } from "grammy";
 import type { Context } from "grammy";
 import { createGrammyLogger } from "@tonshield/logger";
 import type { LoggerFlavor } from "@tonshield/logger";
@@ -9,6 +10,16 @@ import { classifyInput, createBasicScan, isScanResultCacheable } from "@tonshiel
 import { loadBotConfig } from "./config.ts";
 import { createBotDependencies } from "./deps.ts";
 import { formatScanReport, welcomeMessage } from "./messages.ts";
+
+// Force IPv4-first DNS resolution. Railway's egress sometimes resolves
+// `api.telegram.org` to an IPv6 address that doesn't have a working
+// route back, which makes Node's native fetch (used by grammY) hang
+// indefinitely on the first request — including the implicit `getMe()`
+// inside `bot.start()`. The hang has no error, no log, no exit; the
+// process just stops at the top-level `await`. Forcing IPv4 here
+// avoids the unreachable AAAA records entirely. Cheap, no-op on
+// platforms whose IPv6 actually works.
+setDefaultResultOrder("ipv4first");
 
 type BotContext = Context & LoggerFlavor;
 
@@ -114,8 +125,49 @@ process.on("SIGINT", () => {
   void shutdown("SIGINT");
 });
 
-await bot.start({
-  onStart: (botInfo) => {
-    deps.logger.info({ username: botInfo.username }, "bot_started");
-  },
+// Surface anything that escapes async boundaries. grammY puts its own
+// errors through `bot.catch()`, but a stray rejection in middleware or
+// during startup would otherwise vanish (no log, Node exits cleanly).
+// Logging + exiting makes Railway's restart policy do the right thing.
+process.on("uncaughtException", (err) => {
+  deps.logger.fatal({ err }, "bot_uncaught_exception");
+  process.exit(1);
 });
+process.on("unhandledRejection", (reason) => {
+  deps.logger.fatal(
+    { reason: reason instanceof Error ? { name: reason.name, message: reason.message } : reason },
+    "bot_unhandled_rejection",
+  );
+  process.exit(1);
+});
+
+deps.logger.info({}, "bot_starting");
+
+try {
+  await bot.start({
+    onStart: (botInfo) => {
+      deps.logger.info({ username: botInfo.username }, "bot_started");
+    },
+  });
+} catch (err) {
+  // Most likely culprit if this fires: `getMe()` inside `bot.start()`
+  // failed (network / token rejected / api.telegram.org reachability).
+  // We log the structured failure so the deploy logs reveal the cause
+  // instead of the previous silent hang. `GrammyError` carries
+  // `error_code` + `description`; `HttpError` carries the underlying
+  // transport `.error`.
+  if (err instanceof GrammyError) {
+    deps.logger.fatal(
+      { error_code: err.error_code, description: err.description, method: err.method },
+      "bot_start_grammy_error",
+    );
+  } else if (err instanceof HttpError) {
+    deps.logger.fatal(
+      { error: err.error instanceof Error ? err.error.message : String(err.error) },
+      "bot_start_http_error",
+    );
+  } else {
+    deps.logger.fatal({ err }, "bot_start_unknown_error");
+  }
+  process.exit(1);
+}
