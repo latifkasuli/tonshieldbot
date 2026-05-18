@@ -525,6 +525,38 @@ export const coreRules = [
       "Do not stake through this bot. Stake only through the validator's official website or in-app flow you reached from that site; never via a TON transfer to an address pasted in a Telegram chat.",
     defaultScoreDelta: 45,
   },
+  {
+    id: "TELEGRAM_USERNAME_FRAGMENT_HANDOFF",
+    category: "telegram",
+    severity: "high",
+    title: "Telegram username NFT changed owners recently",
+    description:
+      "The Telegram username has a Fragment NFT registration on TON, and the on-chain history shows the NFT changed owners within the last 30 days. Username handoffs are a documented cluster-impersonation vector — an attacker buys a previously-trusted handle on Fragment, the chat history under that handle stays attached, and the new owner inherits any reputation the prior owner accumulated. Evidence carries the NFT address, the last transfer timestamp, and (when available) the prior owner's address.",
+    recommendation:
+      "Be especially cautious about messages sent from this handle. If the chat history references actions taken before the handoff date, those actions were performed by a different owner. Verify the current owner's identity through an out-of-band channel (the project's official website, not Telegram) before trusting links, payment addresses, or staking instructions sent from this handle.",
+    defaultScoreDelta: 45,
+  },
+  {
+    id: "TELEGRAM_FRAGMENT_API_NOT_CONFIGURED",
+    category: "telegram",
+    severity: "info",
+    title: "Fragment ownership lookup disabled in this deployment",
+    description:
+      "`TONAPI_KEY` is not configured in this environment, so on-chain Fragment username NFT lookups did not run for this scan. Username-handoff detection is skipped; other Telegram-side checks (handle impersonation, brand watchlist, mini-app content) ran unchanged.",
+    recommendation:
+      "If you operate this instance, set `TONAPI_KEY` to enable Fragment ownership lookups in addition to TONAPI emulation.",
+    defaultScoreDelta: 5,
+  },
+  {
+    id: "TELEGRAM_FRAGMENT_API_UNAVAILABLE",
+    category: "telegram",
+    severity: "low",
+    title: "Fragment ownership lookup unavailable",
+    description:
+      "TONAPI returned a rate-limit or provider-down response for the Fragment ownership lookup in this scan. The static-only Telegram signal is still authoritative; on-chain username-handoff detection was skipped for this report.",
+    recommendation: "Retry shortly. If this persists, check TONAPI status and rate-limit budget.",
+    defaultScoreDelta: 10,
+  },
 ] as const satisfies readonly RuleDefinition[];
 
 export type CoreRuleId = (typeof coreRules)[number]["id"];

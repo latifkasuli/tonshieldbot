@@ -9,6 +9,7 @@ import {
   createInMemoryTenantStore,
 } from "@tonshield/storage";
 import type { ApiKeyScope, ApiKeyStore, ReportStore } from "@tonshield/storage";
+import { createFragmentIntelClient, createOwnershipCache } from "@tonshield/fragment-intel";
 import { createTelegramIntelClient } from "@tonshield/telegram-intel";
 import { createTonEmulatorClient } from "@tonshield/ton-emulator";
 import { createApiServer } from "./server.ts";
@@ -58,6 +59,9 @@ const buildApp = async (
   const telegramEntities = createInMemoryTelegramEntityStore();
   const telegramGiftCatalog = createInMemoryGiftCatalogStore();
 
+  const fragment = createFragmentIntelClient({ apiKey: null, baseUrl: "https://tonapi.io" });
+  const fragmentCache = createOwnershipCache();
+
   const app = createApiServer({
     logger,
     apiKeys,
@@ -67,6 +71,8 @@ const buildApp = async (
     telegramIntel,
     telegramEntities,
     telegramGiftCatalog,
+    fragment,
+    fragmentCache,
   });
 
   return { app, apiKeys, reports, rawKey: options.rawKey ?? "tsk_test_key" };

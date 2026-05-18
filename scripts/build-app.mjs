@@ -8,13 +8,19 @@
  *   <app>/dist/index.js.map — sourcemap for prod stacktraces
  *
  * Bundling policy:
- *   - `@tonshield/*` workspace packages are inlined into the bundle.
- *     Their source is small, they share no runtime state, and inlining
- *     means the production container doesn't need pnpm to resolve
- *     workspace symlinks. Build once, ship one file per app.
- *   - Everything else (hono, grammy, drizzle-orm, ioredis, pg, …) stays
- *     external. These have native bindings, dynamic requires, or just
- *     don't tree-shake well; bundling them is asking for trouble.
+ *   Everything that isn't a Node built-in gets inlined into the
+ *   bundle — `@tonshield/*` workspace source AND every transitive npm
+ *   runtime dep (pino, drizzle-orm, grammy, pg, …). The alternative —
+ *   externalizing npm deps so they resolve from `node_modules` at
+ *   runtime — failed in pnpm's strict layout because the app
+ *   `node_modules` only contains its DIRECT deps; transitives live
+ *   under `.pnpm/...` and aren't reachable from `apps/<app>/dist/`
+ *   without per-app dep-grooming we don't want to maintain.
+ *
+ *   To make CJS packages work inside the ESM bundle, the
+ *   `createRequire` banner below is injected at the top of every
+ *   output. Without it, libraries that internally call `require(...)`
+ *   (pino, drizzle-orm) crash with "Dynamic require not supported".
  *
  * Why esbuild rather than tsc per-package emit:
  *   The project's existing tsconfig is bundler-mode with

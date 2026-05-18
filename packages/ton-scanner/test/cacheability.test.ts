@@ -126,6 +126,44 @@ describe("isScanResultCacheable", () => {
     expect(isScanResultCacheable(telegramHandleInput(), { emulatorEnabled: false })).toBe(true);
   });
 
+  // PR-36 review blocker: Fragment NFT ownership is live on-chain state.
+  // A cache populated when `TONAPI_KEY` was absent would otherwise serve
+  // `TELEGRAM_FRAGMENT_API_NOT_CONFIGURED` forever after the key is set.
+  it("returns false for telegram_handle when fragmentEnabled is true (regardless of telegramIntelEnabled)", () => {
+    expect(
+      isScanResultCacheable(telegramHandleInput(), {
+        emulatorEnabled: false,
+        telegramIntelEnabled: false,
+        fragmentEnabled: true,
+      }),
+    ).toBe(false);
+  });
+
+  it("returns false for telegram_url and telegram_deeplink when fragmentEnabled is true", () => {
+    expect(
+      isScanResultCacheable(telegramUrlInput(), {
+        emulatorEnabled: false,
+        fragmentEnabled: true,
+      }),
+    ).toBe(false);
+    expect(
+      isScanResultCacheable(telegramDeeplinkInput(), {
+        emulatorEnabled: false,
+        fragmentEnabled: true,
+      }),
+    ).toBe(false);
+  });
+
+  it("returns true when both telegramIntel and fragment are disabled (no live state)", () => {
+    expect(
+      isScanResultCacheable(telegramHandleInput(), {
+        emulatorEnabled: false,
+        telegramIntelEnabled: false,
+        fragmentEnabled: false,
+      }),
+    ).toBe(true);
+  });
+
   it("returns true for unknown inputs regardless of emulator state", () => {
     expect(isScanResultCacheable(unknownInput(), { emulatorEnabled: false })).toBe(true);
     expect(isScanResultCacheable(unknownInput(), { emulatorEnabled: true })).toBe(true);

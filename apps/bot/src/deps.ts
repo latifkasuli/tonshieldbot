@@ -1,4 +1,10 @@
 import { Redis } from "ioredis";
+import {
+  createFragmentIntelClient,
+  createOwnershipCache,
+  type FragmentIntelClient,
+  type OwnershipCache,
+} from "@tonshield/fragment-intel";
 import { createLogger } from "@tonshield/logger";
 import type { Logger } from "@tonshield/logger";
 import { createInMemoryRateLimiter, createRedisRateLimiter } from "@tonshield/rate-limit";
@@ -24,6 +30,10 @@ export interface BotDependencies {
    * TELEGRAM_BOT_API_NOT_CONFIGURED instead of attempting Bot API calls.
    */
   readonly telegramIntel: TelegramIntelClient;
+  /** Fragment intel client (PR-36) — on-chain username NFT lookups. */
+  readonly fragment: FragmentIntelClient;
+  /** Process-wide TTL cache for Fragment ownership lookups. */
+  readonly fragmentCache: OwnershipCache;
   readonly close: () => Promise<void>;
 }
 
@@ -67,6 +77,17 @@ export const createBotDependencies = (config: BotConfig): BotDependencies => {
     "telegram_intel_initialized",
   );
 
+  const fragment = createFragmentIntelClient({
+    apiKey: config.tonApiKey ?? null,
+    baseUrl: config.tonApiBaseUrl ?? "https://tonapi.io",
+  });
+  const fragmentCache = createOwnershipCache();
+
+  logger.info(
+    { enabled: fragment.enabled, baseUrl: fragment.baseUrl },
+    "fragment_intel_initialized",
+  );
+
   return {
     logger,
     storage,
@@ -74,6 +95,8 @@ export const createBotDependencies = (config: BotConfig): BotDependencies => {
     redis,
     emulator,
     telegramIntel,
+    fragment,
+    fragmentCache,
     close: async () => {
       await storage.close();
       if (redis !== null) {

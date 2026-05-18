@@ -3,6 +3,7 @@
   "compilerOptions": {
     "paths": {
       "@tonshield/api-auth": ["./packages/api-auth/src/index.ts"],
+      "@tonshield/fragment-intel": ["./packages/fragment-intel/src/index.ts"],
       "@tonshield/logger": ["./packages/logger/src/index.ts"],
       "@tonshield/rate-limit": ["./packages/rate-limit/src/index.ts"],
       "@tonshield/risk-engine": ["./packages/risk-engine/src/index.ts"],

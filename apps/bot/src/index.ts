@@ -49,6 +49,7 @@ bot.on("message:text", async (ctx) => {
   const cacheable = isScanResultCacheable(classified, {
     emulatorEnabled: deps.emulator.enabled,
     telegramIntelEnabled: deps.telegramIntel.enabled,
+    fragmentEnabled: deps.fragment.enabled,
   });
   const cached = cacheable ? await deps.storage.reports.findByInputHash(inputHash) : null;
 
@@ -67,6 +68,8 @@ bot.on("message:text", async (ctx) => {
       telegramIntel: deps.telegramIntel,
       telegramEntities: deps.storage.telegramEntities,
       telegramGiftCatalog: deps.storage.telegramGiftCatalog,
+      fragment: deps.fragment,
+      fragmentCache: deps.fragmentCache,
       rawInput,
     });
     // `ReportStore.save()` is dedup-aware and returns the existing row on

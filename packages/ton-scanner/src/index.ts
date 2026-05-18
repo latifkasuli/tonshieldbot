@@ -46,5 +46,10 @@ export type {
   BusinessDeeplinkScanInput,
   BusinessDeeplinkScanResult,
 } from "./telegram/business-deeplink-scanner.ts";
+export {
+  checkFragmentHandoff,
+  checkFragmentHandoffForCandidates,
+} from "./telegram/fragment-handoff.ts";
+export type { FragmentHandoffEvent, FragmentHandoffOptions } from "./telegram/fragment-handoff.ts";
 export { isScanResultCacheable } from "./cacheability.ts";
 export type { DecodedPayload, ParsedMessage } from "./transaction/types.ts";

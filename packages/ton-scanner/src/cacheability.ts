@@ -32,7 +32,11 @@ import type { ScanInput } from "@tonshield/shared";
  */
 export const isScanResultCacheable = (
   input: ScanInput,
-  options: { readonly emulatorEnabled: boolean; readonly telegramIntelEnabled?: boolean },
+  options: {
+    readonly emulatorEnabled: boolean;
+    readonly telegramIntelEnabled?: boolean;
+    readonly fragmentEnabled?: boolean;
+  },
 ): boolean => {
   if ((input.kind === "transaction_json" || input.kind === "boc") && options.emulatorEnabled) {
     return false;
@@ -43,13 +47,21 @@ export const isScanResultCacheable = (
   // member counts) is live, and pre-token-rollout cached
   // `TELEGRAM_BOT_API_NOT_CONFIGURED` findings would otherwise stick
   // around after operators set the token.
+  //
+  // M3 PR-36: Fragment NFT ownership is also live on-chain state, and a
+  // pre-key `TELEGRAM_FRAGMENT_API_NOT_CONFIGURED` finding would
+  // otherwise stick after operators set `TONAPI_KEY`. Either intel being
+  // enabled is enough to require bypass — they read different state, so
+  // a deployment with only one enabled still has fresh data we want.
+  const telegramShaped =
+    input.kind === "telegram_handle" ||
+    input.kind === "telegram_url" ||
+    input.kind === "telegram_deeplink" ||
+    input.kind === "telegram_miniapp_url" ||
+    input.kind === "telegram_nft_link";
   if (
-    options.telegramIntelEnabled === true &&
-    (input.kind === "telegram_handle" ||
-      input.kind === "telegram_url" ||
-      input.kind === "telegram_deeplink" ||
-      input.kind === "telegram_miniapp_url" ||
-      input.kind === "telegram_nft_link")
+    telegramShaped &&
+    (options.telegramIntelEnabled === true || options.fragmentEnabled === true)
   ) {
     return false;
   }
