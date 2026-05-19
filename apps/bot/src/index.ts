@@ -21,11 +21,19 @@ import { formatScanReport, welcomeMessage } from "./messages.ts";
 // platforms whose IPv6 actually works.
 dns.setDefaultResultOrder("ipv4first");
 
+const BOT_API_REQUEST_TIMEOUT_SECONDS = 20;
+const BOT_LONG_POLL_TIMEOUT_SECONDS = 10;
+const BOT_STARTUP_TIMEOUT_MS = 45_000;
+
 type BotContext = Context & LoggerFlavor;
 
 const config = loadBotConfig();
 const deps = createBotDependencies(config);
-const bot = new Bot<BotContext>(config.token);
+const bot = new Bot<BotContext>(config.token, {
+  client: {
+    timeoutSeconds: BOT_API_REQUEST_TIMEOUT_SECONDS,
+  },
+});
 const manifestCache = new TtlFetchCache();
 
 bot.use(createGrammyLogger<BotContext>({ logger: deps.logger }));
@@ -143,15 +151,42 @@ process.on("unhandledRejection", (reason) => {
 
 deps.logger.info({}, "bot_starting");
 
+const startupWatchdog = setTimeout(() => {
+  deps.logger.fatal(
+    {
+      timeout_ms: BOT_STARTUP_TIMEOUT_MS,
+      request_timeout_seconds: BOT_API_REQUEST_TIMEOUT_SECONDS,
+      long_poll_timeout_seconds: BOT_LONG_POLL_TIMEOUT_SECONDS,
+      is_running: bot.isRunning(),
+      is_inited: bot.isInited(),
+    },
+    "bot_start_timeout",
+  );
+  process.exit(1);
+}, BOT_STARTUP_TIMEOUT_MS);
+startupWatchdog.unref();
+
 try {
+  // grammY's `bot.start()` does this internally, but it wraps startup
+  // calls in indefinite retry logic. Do an explicit preflight first so a
+  // bad token or unreachable Telegram API fails under our shorter client
+  // timeout and produces a precise deploy-log breadcrumb.
+  const botInfo = await bot.api.getMe();
+  bot.botInfo = botInfo;
+  deps.logger.info({ id: botInfo.id, username: botInfo.username }, "bot_get_me_ok");
+
   await bot.start({
+    timeout: BOT_LONG_POLL_TIMEOUT_SECONDS,
     onStart: (botInfo) => {
+      clearTimeout(startupWatchdog);
       deps.logger.info({ username: botInfo.username }, "bot_started");
     },
   });
 } catch (err) {
-  // Most likely culprit if this fires: `getMe()` inside `bot.start()`
-  // failed (network / token rejected / api.telegram.org reachability).
+  clearTimeout(startupWatchdog);
+  // Most likely culprit if this fires: the explicit `getMe()` preflight
+  // or `deleteWebhook()` inside `bot.start()` failed (network / token
+  // rejected / api.telegram.org reachability).
   // We log the structured failure so the deploy logs reveal the cause
   // instead of the previous silent hang. `GrammyError` carries
   // `error_code` + `description`; `HttpError` carries the underlying
