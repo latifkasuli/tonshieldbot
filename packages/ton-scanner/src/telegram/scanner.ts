@@ -189,6 +189,17 @@ export const scanTelegramEntity = async (
     result = await resolveById(client, input.numericId);
   } else if (input.channelOrSupergroupHandle !== undefined) {
     result = await resolveChannelOrSupergroup(client, input.channelOrSupergroupHandle);
+    if (result.status === "not_resolvable") {
+      const observedEntity = await store.findEntityByUsername(
+        input.channelOrSupergroupHandle.replace(/^@/, ""),
+      );
+      if (observedEntity !== null) {
+        const observedResult = await resolveById(client, observedEntity.id);
+        if (observedResult.status === "ok") {
+          result = observedResult;
+        }
+      }
+    }
   } else {
     // No input fields populated — caller programming error, not a user
     // error. Treat as not-resolvable with a generic reason.

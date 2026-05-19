@@ -128,6 +128,22 @@
     "notes": "Hamster Kombat Mini App."
   },
   {
+    "brand": "StarsHash",
+    "category": "mini_app_platform",
+    "matchKeys": [
+      "starshash",
+      "starshash_bot",
+      "starshashbot",
+      "starhash",
+      "starhash_bot",
+      "starhashbot",
+      "starhash_robot",
+      "starhashrobot"
+    ],
+    "legitimateHandles": ["starshash", "starshash_bot"],
+    "notes": "StarsHash Telegram Mini App. Public Telegram discovery and MiniTelegram list the official community as @starshash and the Mini App bot as @starshash_bot; common clone/typo shapes drop the second 's' or use '*robot'."
+  },
+  {
     "brand": "MetaMask",
     "category": "wallet",
     "matchKeys": [

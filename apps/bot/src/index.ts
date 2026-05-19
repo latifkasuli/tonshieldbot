@@ -5,7 +5,7 @@ import { createGrammyLogger } from "@tonshield/logger";
 import type { LoggerFlavor } from "@tonshield/logger";
 import { createGrammyRateLimit, defaultTierLimits } from "@tonshield/rate-limit";
 import { TtlFetchCache } from "@tonshield/safe-fetch";
-import { canonicalInputHash } from "@tonshield/storage";
+import { canonicalInputHash, type TelegramEntitySnapshotInput } from "@tonshield/storage";
 import { classifyInput, createBasicScan, isScanResultCacheable } from "@tonshield/ton-scanner";
 import { loadBotConfig } from "./config.ts";
 import { createBotDependencies } from "./deps.ts";
@@ -21,6 +21,7 @@ dns.setDefaultResultOrder("ipv4first");
 const BOT_API_REQUEST_TIMEOUT_SECONDS = 20;
 const BOT_LONG_POLL_TIMEOUT_SECONDS = 10;
 const BOT_STARTUP_TIMEOUT_MS = 45_000;
+const OBSERVED_SENDER_SNAPSHOT_COOLDOWN_MS = 5 * 60 * 1000;
 
 type BotContext = Context & LoggerFlavor;
 
@@ -65,6 +66,40 @@ const bot = new Bot<BotContext>(config.token, {
 const manifestCache = new TtlFetchCache();
 
 let fatalExitScheduled = false;
+
+const observeMessageSender = async (ctx: BotContext): Promise<void> => {
+  const from = ctx.from;
+  if (from === undefined) return;
+
+  const displayName = [from.first_name, from.last_name]
+    .filter((value): value is string => typeof value === "string" && value.length > 0)
+    .join(" ")
+    .trim();
+
+  const snapshot: TelegramEntitySnapshotInput = {
+    entityId: BigInt(from.id),
+    entityKind: from.is_bot ? "bot" : "user",
+    observedAt: new Date(),
+    username: typeof from.username === "string" ? from.username.toLowerCase() : null,
+    activeUsernames: null,
+    displayName: displayName.length > 0 ? displayName : null,
+    bio: null,
+    photoFileUniqueId: null,
+    isPremium: from.is_premium === true ? true : null,
+    memberCount: null,
+    isBot: from.is_bot,
+    source: "message_observe",
+    raw: from as unknown as Readonly<Record<string, unknown>>,
+  };
+
+  try {
+    await deps.storage.telegramEntities.recordSnapshot(snapshot, {
+      cooldownMs: OBSERVED_SENDER_SNAPSHOT_COOLDOWN_MS,
+    });
+  } catch (err) {
+    ctx.log.warn({ err }, "telegram_sender_observe_failed");
+  }
+};
 
 const serialiseError = (err: unknown): Record<string, unknown> => {
   if (err instanceof Error) {
@@ -125,6 +160,8 @@ bot.command("help", async (ctx) => {
 });
 
 bot.on("message:text", async (ctx) => {
+  await observeMessageSender(ctx);
+
   const rawInput = ctx.message.text;
   const classified = classifyInput(rawInput);
   const inputHash = canonicalInputHash(classified);

@@ -276,6 +276,18 @@ describe("matchAgainstWatchlist", () => {
       strength: "exact",
     });
   });
+
+  it("suppresses the official StarsHash bot and flags the Star Hash Robot clone shape", () => {
+    expect(
+      matchAgainstWatchlist("starshash_bot", seedWatchlist, { candidateHandle: "starshash_bot" }),
+    ).toBeNull();
+    expect(
+      matchAgainstWatchlist("starhashrobot", seedWatchlist, { candidateHandle: "starhashrobot" }),
+    ).toMatchObject({
+      brand: { brand: "StarsHash" },
+      strength: "exact",
+    });
+  });
 });
 
 describe("matchTextAgainstWatchlist", () => {

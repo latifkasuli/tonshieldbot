@@ -129,6 +129,68 @@ describe("createBasicScan — Telegram inputs that should never look 'clean' by 
     });
   });
 
+  it("resolves an observed user handle by cached numeric ID when cold @handle lookup fails", async () => {
+    const telegramEntities = createInMemoryTelegramEntityStore();
+    await telegramEntities.recordSnapshot({
+      entityId: 424242n,
+      entityKind: "user",
+      observedAt: new Date("2026-05-19T10:00:00Z"),
+      username: "latifkasuli",
+      activeUsernames: null,
+      displayName: "Latif Kasuli",
+      bio: null,
+      photoFileUniqueId: null,
+      isPremium: null,
+      memberCount: null,
+      isBot: false,
+      source: "message_observe",
+      raw: null,
+    });
+    const getChat = vi.fn((target: string) => {
+      if (target === "@latifkasuli") {
+        return Promise.reject(
+          Object.assign(new Error("Bad Request: chat not found"), {
+            error_code: 400,
+            description: "Bad Request: chat not found",
+          }),
+        );
+      }
+      if (target === "424242") {
+        return Promise.resolve({
+          id: 424242,
+          type: "private",
+          username: "latifkasuli",
+          first_name: "Latif",
+          last_name: "Kasuli",
+          is_bot: false,
+        });
+      }
+      return Promise.reject(new Error(`unexpected getChat target ${target}`));
+    });
+    const telegramIntel: TelegramIntelClient = {
+      enabled: true,
+      apiBaseUrl: "https://api.telegram.org",
+      raw: { getChat } as unknown as TelegramIntelClient["raw"],
+    };
+
+    const report = await createBasicScan({
+      rawInput: "@latifkasuli",
+      telegramIntel,
+      telegramEntities,
+    });
+
+    expect(getChat).toHaveBeenNthCalledWith(1, "@latifkasuli");
+    expect(getChat).toHaveBeenNthCalledWith(2, "424242");
+    expect(report.findings.map((f) => f.ruleId)).not.toContain("TELEGRAM_ENTITY_NOT_RESOLVABLE");
+    const latest = await telegramEntities.latestSnapshot(424242n);
+    expect(latest).toMatchObject({
+      username: "latifkasuli",
+      entityKind: "user",
+      source: "getChat",
+      displayName: "Latif Kasuli",
+    });
+  });
+
   it("emits TELEGRAM_INPUT_RECOGNISED_NOT_SCANNED for t.me URLs with no resolvable handle (joinchat, +invite, /c/...)", async () => {
     // PR-2 review High #2: t.me/+abcdef and t.me/c/<id>/N landed as
     // telegram_url with handle:null and gatherScanResult dropped them.
