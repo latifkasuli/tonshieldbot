@@ -36,6 +36,44 @@ const bot = new Bot<BotContext>(config.token, {
 });
 const manifestCache = new TtlFetchCache();
 
+let fatalExitScheduled = false;
+
+const serialiseError = (err: unknown): Record<string, unknown> => {
+  if (err instanceof Error) {
+    const cause = (err as Error & { cause?: unknown }).cause;
+    return {
+      name: err.name,
+      message: err.message,
+      ...(err.stack === undefined ? {} : { stack: err.stack }),
+      ...(cause === undefined ? {} : { cause: serialiseError(cause) }),
+    };
+  }
+  return { value: String(err) };
+};
+
+const exitAfterFatalLog = (message: string, fields: Record<string, unknown>): void => {
+  if (fatalExitScheduled) return;
+  fatalExitScheduled = true;
+
+  const record = {
+    level: "fatal",
+    time: new Date().toISOString(),
+    service: "tonshield-bot",
+    ...fields,
+    msg: message,
+  };
+
+  // Railway was showing the pnpm exit line without the pino fatal line.
+  // Write a plain JSON record to stderr before exiting so startup failures
+  // survive pino-pretty transport buffering.
+  process.stderr.write(`${JSON.stringify(record)}\n`);
+  deps.logger.fatal(fields, message);
+
+  setTimeout(() => {
+    process.exit(1);
+  }, 250);
+};
+
 bot.use(createGrammyLogger<BotContext>({ logger: deps.logger }));
 
 bot.use(
@@ -138,21 +176,17 @@ process.on("SIGINT", () => {
 // during startup would otherwise vanish (no log, Node exits cleanly).
 // Logging + exiting makes Railway's restart policy do the right thing.
 process.on("uncaughtException", (err) => {
-  deps.logger.fatal({ err }, "bot_uncaught_exception");
-  process.exit(1);
+  exitAfterFatalLog("bot_uncaught_exception", { err: serialiseError(err) });
 });
 process.on("unhandledRejection", (reason) => {
-  deps.logger.fatal(
-    { reason: reason instanceof Error ? { name: reason.name, message: reason.message } : reason },
-    "bot_unhandled_rejection",
-  );
-  process.exit(1);
+  exitAfterFatalLog("bot_unhandled_rejection", { reason: serialiseError(reason) });
 });
 
 deps.logger.info({}, "bot_starting");
 
 const startupWatchdog = setTimeout(() => {
-  deps.logger.fatal(
+  exitAfterFatalLog(
+    "bot_start_timeout",
     {
       timeout_ms: BOT_STARTUP_TIMEOUT_MS,
       request_timeout_seconds: BOT_API_REQUEST_TIMEOUT_SECONDS,
@@ -160,9 +194,7 @@ const startupWatchdog = setTimeout(() => {
       is_running: bot.isRunning(),
       is_inited: bot.isInited(),
     },
-    "bot_start_timeout",
   );
-  process.exit(1);
 }, BOT_STARTUP_TIMEOUT_MS);
 startupWatchdog.unref();
 
@@ -192,17 +224,24 @@ try {
   // `error_code` + `description`; `HttpError` carries the underlying
   // transport `.error`.
   if (err instanceof GrammyError) {
-    deps.logger.fatal(
-      { error_code: err.error_code, description: err.description, method: err.method },
+    exitAfterFatalLog(
       "bot_start_grammy_error",
+      {
+        error_code: err.error_code,
+        description: err.description,
+        method: err.method,
+        err: serialiseError(err),
+      },
     );
   } else if (err instanceof HttpError) {
-    deps.logger.fatal(
-      { error: err.error instanceof Error ? err.error.message : String(err.error) },
+    exitAfterFatalLog(
       "bot_start_http_error",
+      {
+        error: serialiseError(err.error),
+        err: serialiseError(err),
+      },
     );
   } else {
-    deps.logger.fatal({ err }, "bot_start_unknown_error");
+    exitAfterFatalLog("bot_start_unknown_error", { err: serialiseError(err) });
   }
-  process.exit(1);
 }
