@@ -7,7 +7,8 @@ import { classifyBotApiFailure, type BotApiFailure } from "./failure.ts";
  * capabilities per docs/research/m3-design.md §3.1:
  *
  *   1. `resolveChannelOrSupergroup(@handle)` — `getChat(@handle)`. Bot API
- *      *does* support username resolution for channels and supergroups.
+ *      documents username resolution for channels and supergroups, and in
+ *      practice can also return public bot/user handles as `type=private`.
  *   2. `resolveById(numeric_id)` — `getChat(id)`. Works once we have the
  *      numeric ID (from a forward, prior observation, or our snapshot store).
  *      Bot must have prior interaction with users; channels/supergroups
@@ -56,8 +57,8 @@ export type ResolverResult =
  *     document cold user/bot @handle resolution. UX should prompt the
  *     user to forward a message from the target instead.
  *   - `resolved_not_channel_or_supergroup` — the handle resolved, but to
- *     a different entity kind (group, private, etc.). The channel-path
- *     scan can't act on it; the right path differs by kind.
+ *     a group or another unsupported kind. Private bot/user handles are
+ *     accepted when Telegram returns them from `getChat(@handle)`.
  *   - `entity_not_found_by_id` — `getChat(numeric_id)` returned
  *     "chat not found". The ID is real (we observed it once) but Bot API
  *     can't see it now — common when the entity was deleted, the bot
@@ -93,10 +94,11 @@ const stripLeadingAt = (handle: string): string =>
   handle.startsWith("@") ? handle.slice(1) : handle;
 
 /**
- * Resolve a public channel or supergroup by `@handle`. Returns
- * `not_resolvable` with `reason: "channel_or_supergroup_not_found"` when
- * Telegram says chat not found — this could mean the handle is dead OR it's
- * actually a user/bot handle the caller should have routed differently.
+ * Resolve a public Telegram handle by `@handle`. The name is historical:
+ * this started as the documented channel/supergroup path, but Telegram also
+ * returns public bot/user handles as `type=private` in practice. Accept those
+ * as resolvable entities so pasted public handles are useful without forcing
+ * the user to forward a message first.
  */
 export const resolveChannelOrSupergroup = async (
   client: TelegramIntelClient,
@@ -111,17 +113,15 @@ export const resolveChannelOrSupergroup = async (
   try {
     const chat = await client.raw.getChat(`@${normalised}`);
 
-    if (chat.type !== "channel" && chat.type !== "supergroup") {
-      // The handle resolved but to a different entity kind (private chat,
-      // group, etc.). Surface a specific reason so the scanner can tell
-      // the user "this is a user/bot, forward a message" vs "this is a
-      // group, scanning groups isn't supported" rather than a single
-      // generic message.
-      const reason: NotResolvableReason =
-        chat.type === "private"
-          ? "user_or_bot_handle_requires_prior_context"
-          : "resolved_not_channel_or_supergroup";
-      return { status: "not_resolvable", reason, description: null };
+    if (chat.type !== "channel" && chat.type !== "supergroup" && chat.type !== "private") {
+      // The handle resolved but to a different entity kind (for example,
+      // a basic group). Surface a specific reason rather than a single
+      // generic "not found" message.
+      return {
+        status: "not_resolvable",
+        reason: "resolved_not_channel_or_supergroup",
+        description: null,
+      };
     }
 
     return { status: "ok", entity: toResolvedEntity(chat) };
