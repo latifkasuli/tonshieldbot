@@ -191,6 +191,38 @@ describe("createBasicScan — Telegram inputs that should never look 'clean' by 
     });
   });
 
+  it("flags an exact official handle when the project itself is locally risk-listed", async () => {
+    const getChat = vi.fn().mockResolvedValue({
+      id: 987654321,
+      type: "private",
+      username: "starshash_bot",
+      first_name: "StarsHash",
+      is_bot: true,
+    });
+    const telegramIntel: TelegramIntelClient = {
+      enabled: true,
+      apiBaseUrl: "https://api.telegram.org",
+      raw: { getChat } as unknown as TelegramIntelClient["raw"],
+    };
+
+    const report = await createBasicScan({
+      rawInput: "@starshash_bot",
+      telegramIntel,
+      telegramEntities: createInMemoryTelegramEntityStore(),
+    });
+
+    expect(report.findings.map((f) => f.ruleId)).toContain("TELEGRAM_KNOWN_RISK_PROJECT");
+    expect(report.findings.map((f) => f.ruleId)).not.toContain(
+      "TELEGRAM_HANDLE_IMPERSONATES_PROJECT",
+    );
+    expect(
+      report.findings.find((f) => f.ruleId === "TELEGRAM_KNOWN_RISK_PROJECT")?.evidence,
+    ).toMatchObject({
+      project: "StarsHash",
+      risk: "operator_reported_funds_misconduct",
+    });
+  });
+
   it("emits TELEGRAM_INPUT_RECOGNISED_NOT_SCANNED for t.me URLs with no resolvable handle (joinchat, +invite, /c/...)", async () => {
     // PR-2 review High #2: t.me/+abcdef and t.me/c/<id>/N landed as
     // telegram_url with handle:null and gatherScanResult dropped them.

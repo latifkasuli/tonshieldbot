@@ -526,6 +526,17 @@ export const coreRules = [
     defaultScoreDelta: 45,
   },
   {
+    id: "TELEGRAM_KNOWN_RISK_PROJECT",
+    category: "telegram",
+    severity: "high",
+    title: "Telegram handle belongs to a locally flagged high-risk project",
+    description:
+      "The submitted or resolved Telegram handle exactly matches a project in this deployment's curated risk registry. This is different from impersonation: the handle may be the project's real bot or channel, but the project itself has been locally flagged for serious user-harm reports such as fund-handling misconduct, exit-scam behavior, or similar abuse patterns.",
+    recommendation:
+      "Do not treat an official Telegram handle as proof of safety. Avoid depositing funds, buying off-protocol offers, or following payment instructions from this project unless you have independently verified the current risk through trusted sources.",
+    defaultScoreDelta: 45,
+  },
+  {
     id: "TELEGRAM_USERNAME_FRAGMENT_HANDOFF",
     category: "telegram",
     severity: "high",

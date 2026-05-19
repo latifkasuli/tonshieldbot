@@ -5,6 +5,7 @@ import {
   estimateUserOrBotIdAge,
   isFiringStrength,
   isLikelyVeryNew,
+  matchKnownRiskProjectHandle,
   matchAgainstWatchlist,
   matchTextAgainstWatchlist,
   resolveById,
@@ -13,6 +14,7 @@ import {
   seedWatchlist,
   type AgeEstimate,
   type BrandWatchlistEntry,
+  type KnownRiskProjectEntry,
   type NotResolvableReason,
   type ResolvedEntity,
   type ResolverResult,
@@ -116,6 +118,7 @@ export const scanTelegramEntity = async (
   const pastedHandle = input.channelOrSupergroupHandle ?? input.userOrBotHandle ?? null;
   const inputHandleFindings = checkCandidateHandle(pastedHandle, watchlist);
   const inputFakeBotFindings = checkSensitiveBotCategory(pastedHandle, null, watchlist);
+  const inputKnownRiskFindings = checkKnownRiskProject(pastedHandle);
 
   // PR-36: Fragment on-chain ownership lookup. Per blocker on PR-36
   // review: the lookup must consider BOTH the pasted handle AND the
@@ -154,9 +157,11 @@ export const scanTelegramEntity = async (
     const merged = mergeResults(
       inputHandleFindings,
       inputFakeBotFindings,
+      inputKnownRiskFindings,
       fragmentScan,
       impersonation,
       fakeBot,
+      checkKnownRiskProject(input.forwardOriginUser.username),
       downstream,
     );
     const ageFinding = checkEntityAge(input.forwardOriginUser, merged.findings, now);
@@ -167,6 +172,7 @@ export const scanTelegramEntity = async (
     return mergeResults(
       inputHandleFindings,
       inputFakeBotFindings,
+      inputKnownRiskFindings,
       await runFragment([pastedHandle]),
       single(emulationFinding("TELEGRAM_BOT_API_NOT_CONFIGURED")),
     );
@@ -178,6 +184,7 @@ export const scanTelegramEntity = async (
     return mergeResults(
       inputHandleFindings,
       inputFakeBotFindings,
+      inputKnownRiskFindings,
       await runFragment([pastedHandle]),
       mapNonOkResolverResult(result, "user_or_bot_handle_requires_prior_context"),
     );
@@ -206,6 +213,7 @@ export const scanTelegramEntity = async (
     return mergeResults(
       inputHandleFindings,
       inputFakeBotFindings,
+      inputKnownRiskFindings,
       await runFragment([pastedHandle]),
       single(
         createFinding({
@@ -228,9 +236,11 @@ export const scanTelegramEntity = async (
     const merged = mergeResults(
       inputHandleFindings,
       inputFakeBotFindings,
+      inputKnownRiskFindings,
       fragmentScan,
       impersonation,
       fakeBot,
+      checkKnownRiskProject(result.entity.username),
       downstream,
     );
     const ageFinding = checkEntityAge(result.entity, merged.findings, now);
@@ -262,6 +272,7 @@ export const scanTelegramEntity = async (
   return mergeResults(
     inputHandleFindings,
     inputFakeBotFindings,
+    inputKnownRiskFindings,
     await runFragment([pastedHandle]),
     mapNonOkResolverResult(
       result,
@@ -574,6 +585,28 @@ const checkSensitiveBotCategory = (
   }
 
   return EMPTY_RESULT;
+};
+
+const checkKnownRiskProject = (
+  handle: string | null,
+  registry?: readonly KnownRiskProjectEntry[],
+): TelegramScanResult => {
+  const match = matchKnownRiskProjectHandle(handle, registry);
+  if (match === null) return EMPTY_RESULT;
+
+  return single(
+    createFinding({
+      confidence: match.severity === "critical" ? "high" : "medium",
+      evidence: {
+        handle,
+        project: match.project,
+        risk: match.risk,
+        registrySeverity: match.severity,
+        notes: match.notes ?? null,
+      },
+      rule: getCoreRule("TELEGRAM_KNOWN_RISK_PROJECT"),
+    }),
+  );
 };
 
 const matchStrengthRank = (match: WatchlistMatch): number => {

@@ -53,3 +53,9 @@ export {
   parseBusinessRights,
 } from "./business-rights-parser.ts";
 export type { BusinessRight, BusinessRightsParseResult } from "./business-rights-parser.ts";
+export {
+  knownRiskProjects,
+  loadKnownRiskProjects,
+  matchKnownRiskProjectHandle,
+} from "./project-risk-registry.ts";
+export type { KnownRiskProjectEntry } from "./project-risk-registry.ts";

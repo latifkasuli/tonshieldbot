@@ -1,0 +1,9 @@
+[
+  {
+    "project": "StarsHash",
+    "handles": ["starshash", "starshash_bot"],
+    "risk": "operator_reported_funds_misconduct",
+    "severity": "high",
+    "notes": "Operator-curated risk entry: reports of user-fund misconduct / exit-scam behavior. This registry is exact-match only and separate from the impersonation watchlist; official handle does not imply safe."
+  }
+]
