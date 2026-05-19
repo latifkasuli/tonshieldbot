@@ -1,4 +1,4 @@
-import { setDefaultResultOrder } from "node:dns";
+import * as dns from "node:dns";
 import { Bot, GrammyError, HttpError } from "grammy";
 import type { Context } from "grammy";
 import { createGrammyLogger } from "@tonshield/logger";
@@ -19,7 +19,7 @@ import { formatScanReport, welcomeMessage } from "./messages.ts";
 // process just stops at the top-level `await`. Forcing IPv4 here
 // avoids the unreachable AAAA records entirely. Cheap, no-op on
 // platforms whose IPv6 actually works.
-setDefaultResultOrder("ipv4first");
+dns.setDefaultResultOrder("ipv4first");
 
 type BotContext = Context & LoggerFlavor;
 
