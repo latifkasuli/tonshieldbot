@@ -1,6 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createTelegramIntelClient } from "../src/client.ts";
 import { isTelegramIntelEnabled, loadTelegramIntelConfig } from "../src/config.ts";
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe("loadTelegramIntelConfig", () => {
   it("treats a missing TELEGRAM_INTEL_BOT_TOKEN as disabled (not an error)", () => {
@@ -75,5 +79,41 @@ describe("createTelegramIntelClient", () => {
 
     expect(enabledClient.raw).toBeDefined();
     expect(disabledClient.raw).toBeDefined();
+  });
+
+  it("uses native fetch with a native AbortSignal for Api calls", async () => {
+    let observedSignal: AbortSignal | null = null;
+    const fetchMock = vi.fn<typeof fetch>((_input, init) => {
+      observedSignal = init?.signal ?? null;
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            ok: true,
+            result: {
+              id: 123456789,
+              type: "private",
+              first_name: "Star Hash",
+              username: "starhashrobot",
+              is_bot: true,
+            },
+          }),
+          { headers: { "content-type": "application/json" } },
+        ),
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const client = createTelegramIntelClient({
+      token: "123456:ABCDEF",
+      apiBaseUrl: "https://api.telegram.org",
+    });
+    const chat = await client.raw.getChat("@starhashrobot");
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(observedSignal).toBeInstanceOf(globalThis.AbortSignal);
+    expect(chat).toMatchObject({
+      type: "private",
+      username: "starhashrobot",
+    });
   });
 });
