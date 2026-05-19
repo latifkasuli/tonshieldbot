@@ -325,11 +325,11 @@ const telegramScanInputFor = (
   input: ScanInput,
 ): { readonly userOrBotHandle?: string; readonly channelOrSupergroupHandle?: string } | null => {
   if (input.kind === "telegram_handle") {
-    // Bare `@handle` — Bot API cannot resolve user/bot handles cold, so
-    // we send this through `resolveUserOrBot` which always returns
-    // `cannot_resolve_cold`. The scanner emits
-    // `TELEGRAM_ENTITY_NOT_RESOLVABLE` with the right reason.
-    return { userOrBotHandle: input.handle };
+    // Bare `@handle` — we don't know statically whether the target is a
+    // channel, user, or bot. Try the public getChat(@handle) path first;
+    // if Bot API cannot resolve it, the scanner still emits the explicit
+    // not-resolvable finding with the forward-message fallback.
+    return { channelOrSupergroupHandle: input.handle };
   }
 
   if (input.kind === "telegram_url") {

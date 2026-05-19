@@ -9,6 +9,31 @@ const clientWithGetChat = (getChat: ReturnType<typeof vi.fn>): TelegramIntelClie
 });
 
 describe("entity resolver", () => {
+  it("accepts public user/bot handles when getChat returns a private chat", async () => {
+    const client = clientWithGetChat(
+      vi.fn().mockResolvedValue({
+        id: 123456789,
+        type: "private",
+        username: "starhashrobot",
+        first_name: "Star Hash",
+        is_bot: true,
+      }),
+    );
+
+    const result = await resolveChannelOrSupergroup(client, "starhashrobot");
+
+    expect(result).toMatchObject({
+      status: "ok",
+      entity: {
+        id: 123456789n,
+        kind: "bot",
+        username: "starhashrobot",
+        displayName: "Star Hash",
+        isBot: true,
+      },
+    });
+  });
+
   it("returns a specific reason when a handle resolves but is not a channel/supergroup", async () => {
     const client = clientWithGetChat(
       vi.fn().mockResolvedValue({

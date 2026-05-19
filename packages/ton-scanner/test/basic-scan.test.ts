@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import * as emulator from "@tonshield/ton-emulator";
 import type { TonEmulatorClient } from "@tonshield/ton-emulator";
 import { createInMemoryTelegramEntityStore } from "@tonshield/storage";
+import type { TelegramIntelClient } from "@tonshield/telegram-intel";
 import { createBasicScan } from "../src/basic-scan.ts";
 
 // Mock the emulator boundary so we can detect calls without making any
@@ -96,6 +97,38 @@ describe("createBasicScan composition of static + emulation paths", () => {
 // rather than producing an empty findings array.
 
 describe("createBasicScan — Telegram inputs that should never look 'clean' by accident", () => {
+  it("routes bare @handles through getChat so public bot/user handles can resolve", async () => {
+    const getChat = vi.fn().mockResolvedValue({
+      id: 123456789,
+      type: "private",
+      username: "starhashrobot",
+      first_name: "Star Hash",
+      is_bot: true,
+    });
+    const telegramIntel: TelegramIntelClient = {
+      enabled: true,
+      apiBaseUrl: "https://api.telegram.org",
+      raw: { getChat } as unknown as TelegramIntelClient["raw"],
+    };
+    const telegramEntities = createInMemoryTelegramEntityStore();
+
+    const report = await createBasicScan({
+      rawInput: "@starhashrobot",
+      telegramIntel,
+      telegramEntities,
+    });
+
+    expect(getChat).toHaveBeenCalledWith("@starhashrobot");
+    expect(report.input.kind).toBe("telegram_handle");
+    expect(report.findings.map((f) => f.ruleId)).not.toContain("TELEGRAM_ENTITY_NOT_RESOLVABLE");
+    const latest = await telegramEntities.latestSnapshot(123456789n);
+    expect(latest).toMatchObject({
+      username: "starhashrobot",
+      entityKind: "bot",
+      displayName: "Star Hash",
+    });
+  });
+
   it("emits TELEGRAM_INPUT_RECOGNISED_NOT_SCANNED for t.me URLs with no resolvable handle (joinchat, +invite, /c/...)", async () => {
     // PR-2 review High #2: t.me/+abcdef and t.me/c/<id>/N landed as
     // telegram_url with handle:null and gatherScanResult dropped them.
