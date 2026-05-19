@@ -185,16 +185,13 @@ process.on("unhandledRejection", (reason) => {
 deps.logger.info({}, "bot_starting");
 
 const startupWatchdog = setTimeout(() => {
-  exitAfterFatalLog(
-    "bot_start_timeout",
-    {
-      timeout_ms: BOT_STARTUP_TIMEOUT_MS,
-      request_timeout_seconds: BOT_API_REQUEST_TIMEOUT_SECONDS,
-      long_poll_timeout_seconds: BOT_LONG_POLL_TIMEOUT_SECONDS,
-      is_running: bot.isRunning(),
-      is_inited: bot.isInited(),
-    },
-  );
+  exitAfterFatalLog("bot_start_timeout", {
+    timeout_ms: BOT_STARTUP_TIMEOUT_MS,
+    request_timeout_seconds: BOT_API_REQUEST_TIMEOUT_SECONDS,
+    long_poll_timeout_seconds: BOT_LONG_POLL_TIMEOUT_SECONDS,
+    is_running: bot.isRunning(),
+    is_inited: bot.isInited(),
+  });
 }, BOT_STARTUP_TIMEOUT_MS);
 startupWatchdog.unref();
 
@@ -224,23 +221,17 @@ try {
   // `error_code` + `description`; `HttpError` carries the underlying
   // transport `.error`.
   if (err instanceof GrammyError) {
-    exitAfterFatalLog(
-      "bot_start_grammy_error",
-      {
-        error_code: err.error_code,
-        description: err.description,
-        method: err.method,
-        err: serialiseError(err),
-      },
-    );
+    exitAfterFatalLog("bot_start_grammy_error", {
+      error_code: err.error_code,
+      description: err.description,
+      method: err.method,
+      err: serialiseError(err),
+    });
   } else if (err instanceof HttpError) {
-    exitAfterFatalLog(
-      "bot_start_http_error",
-      {
-        error: serialiseError(err.error),
-        err: serialiseError(err),
-      },
-    );
+    exitAfterFatalLog("bot_start_http_error", {
+      error: serialiseError(err.error),
+      err: serialiseError(err),
+    });
   } else {
     exitAfterFatalLog("bot_start_unknown_error", { err: serialiseError(err) });
   }
