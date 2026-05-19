@@ -13,10 +13,7 @@ import { formatScanReport, welcomeMessage } from "./messages.ts";
 
 // Force IPv4-first DNS resolution. Railway's egress sometimes resolves
 // `api.telegram.org` to an IPv6 address that doesn't have a working
-// route back, which makes Node's native fetch (used by grammY) hang
-// indefinitely on the first request — including the implicit `getMe()`
-// inside `bot.start()`. The hang has no error, no log, no exit; the
-// process just stops at the top-level `await`. Forcing IPv4 here
+// route back, which can make Bot API requests hang. Forcing IPv4 here
 // avoids the unreachable AAAA records entirely. Cheap, no-op on
 // platforms whose IPv6 actually works.
 dns.setDefaultResultOrder("ipv4first");
@@ -27,10 +24,41 @@ const BOT_STARTUP_TIMEOUT_MS = 45_000;
 
 type BotContext = Context & LoggerFlavor;
 
+const createTelegramFetch = (): typeof fetch => {
+  return async (input, init) => {
+    const upstreamSignal = init?.signal;
+    if (upstreamSignal == null) {
+      return await globalThis.fetch(input, init);
+    }
+
+    // grammY's Node shim uses the `abort-controller` package, but the
+    // production bundle can load `node-fetch@2` from a different module
+    // instance. `node-fetch` then rejects the signal via `instanceof`.
+    // Translate grammY's signal into Node 24's native signal and use
+    // native fetch so startup getMe/deleteWebhook timeouts keep working.
+    const controller = new globalThis.AbortController();
+    const abort = () => {
+      controller.abort(upstreamSignal.reason);
+    };
+    if (upstreamSignal.aborted) {
+      abort();
+    } else {
+      upstreamSignal.addEventListener("abort", abort, { once: true });
+    }
+
+    try {
+      return await globalThis.fetch(input, { ...init, signal: controller.signal });
+    } finally {
+      upstreamSignal.removeEventListener("abort", abort);
+    }
+  };
+};
+
 const config = loadBotConfig();
 const deps = createBotDependencies(config);
 const bot = new Bot<BotContext>(config.token, {
   client: {
+    fetch: createTelegramFetch(),
     timeoutSeconds: BOT_API_REQUEST_TIMEOUT_SECONDS,
   },
 });
