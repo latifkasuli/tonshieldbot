@@ -8,6 +8,14 @@ describe("loadApiConfig", () => {
       port: 3000,
       databaseUrl: undefined,
       redisUrl: undefined,
+      telegramApiBaseUrl: undefined,
+      telegramIntelBotToken: undefined,
+      telegramMtprotoApiHash: undefined,
+      telegramMtprotoApiId: undefined,
+      telegramMtprotoBotToken: undefined,
+      telegramMtprotoSession: undefined,
+      tonApiBaseUrl: undefined,
+      tonApiKey: undefined,
     });
   });
 

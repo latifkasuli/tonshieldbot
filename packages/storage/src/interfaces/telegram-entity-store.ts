@@ -56,7 +56,7 @@ export interface TelegramEntitySnapshotInput {
   readonly isPremium: boolean | null;
   readonly memberCount: number | null;
   readonly isBot: boolean | null;
-  readonly source: "getChat" | "message_observe" | "forward" | "manual";
+  readonly source: "getChat" | "message_observe" | "forward" | "manual" | "mtproto";
   readonly raw: Readonly<Record<string, unknown>> | null;
 }
 

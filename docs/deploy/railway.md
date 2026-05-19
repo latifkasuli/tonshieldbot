@@ -28,6 +28,9 @@ The web app (`apps/web`) is not deployed yet — it's still a placeholder landin
      - (Railway injects `PORT` automatically; the API picks it up — no `API_PORT` needed)
    - Optional:
      - `REDIS_URL` (linked from a Railway Redis plugin if added — otherwise the api uses an in-process token bucket which only works for a single instance)
+     - `TELEGRAM_MTPROTO_API_ID` + `TELEGRAM_MTPROTO_API_HASH` (from <https://my.telegram.org/apps>) enable the MTProto cold-username fallback. If `TELEGRAM_MTPROTO_BOT_TOKEN` is unset, the API reuses `TELEGRAM_INTEL_BOT_TOKEN` for MTProto bot auth.
+     - `TELEGRAM_MTPROTO_BOT_TOKEN` (optional separate bot token for MTProto auth)
+     - `TELEGRAM_MTPROTO_SESSION` (advanced GramJS `StringSession`; prefer bot-token auth unless a user session has been explicitly reviewed)
      - `NODE_ENV=production`
 4. Create the Bot service from the same repo:
    - _Root Directory_: `/`
@@ -37,6 +40,9 @@ The web app (`apps/web`) is not deployed yet — it's still a placeholder landin
      - `DATABASE_URL` (so the bot's scan results land in the same store as the API's, sharing dedup)
    - Optional:
      - `REDIS_URL` (per-Telegram-user rate limit; in-process is fine for a single bot instance)
+     - `TELEGRAM_MTPROTO_API_ID` + `TELEGRAM_MTPROTO_API_HASH` (from <https://my.telegram.org/apps>) enable the MTProto cold-username fallback. If `TELEGRAM_MTPROTO_BOT_TOKEN` is unset, the bot reuses `TELEGRAM_INTEL_BOT_TOKEN` for MTProto bot auth.
+     - `TELEGRAM_MTPROTO_BOT_TOKEN` (optional separate bot token for MTProto auth)
+     - `TELEGRAM_MTPROTO_SESSION` (advanced GramJS `StringSession`; prefer bot-token auth unless a user session has been explicitly reviewed)
      - `NODE_ENV=production`
 5. Create the Worker service from the same repo:
    - _Root Directory_: `/`

@@ -17,6 +17,7 @@ import {
   type TelegramEntityStore,
 } from "@tonshield/storage";
 import type { TelegramIntelClient } from "@tonshield/telegram-intel";
+import type { MtprotoIntelClient } from "@tonshield/telegram-intel/mtproto";
 import type { TonEmulatorClient } from "@tonshield/ton-emulator";
 import { classifyInput, createBasicScan, isScanResultCacheable } from "@tonshield/ton-scanner";
 
@@ -49,6 +50,8 @@ export interface CreateApiServerOptions {
    * surfaces `TELEGRAM_BOT_API_NOT_CONFIGURED` to the user.
    */
   readonly telegramIntel: TelegramIntelClient;
+  /** Optional MTProto fallback for cold public username resolution. */
+  readonly mtprotoIntel: MtprotoIntelClient;
   /** Telegram entity snapshot store. From `storage.telegramEntities`. */
   readonly telegramEntities: TelegramEntityStore;
   /**
@@ -153,6 +156,7 @@ export const createApiServer = (
     const cacheable = isScanResultCacheable(classified, {
       emulatorEnabled: options.emulator.enabled,
       telegramIntelEnabled: options.telegramIntel.enabled,
+      mtprotoIntelEnabled: options.mtprotoIntel.enabled,
       fragmentEnabled: options.fragment.enabled,
     });
     const cached = cacheable ? await options.reports.findByInputHash(inputHash) : null;
@@ -170,6 +174,7 @@ export const createApiServer = (
       cache: manifestCache,
       emulator: options.emulator,
       telegramIntel: options.telegramIntel,
+      mtprotoIntel: options.mtprotoIntel,
       telegramEntities: options.telegramEntities,
       telegramGiftCatalog: options.telegramGiftCatalog,
       fragment: options.fragment,

@@ -171,6 +171,7 @@ bot.on("message:text", async (ctx) => {
   const cacheable = isScanResultCacheable(classified, {
     emulatorEnabled: deps.emulator.enabled,
     telegramIntelEnabled: deps.telegramIntel.enabled,
+    mtprotoIntelEnabled: deps.mtprotoIntel.enabled,
     fragmentEnabled: deps.fragment.enabled,
   });
   const cached = cacheable ? await deps.storage.reports.findByInputHash(inputHash) : null;
@@ -188,6 +189,7 @@ bot.on("message:text", async (ctx) => {
       cache: manifestCache,
       emulator: deps.emulator,
       telegramIntel: deps.telegramIntel,
+      mtprotoIntel: deps.mtprotoIntel,
       telegramEntities: deps.storage.telegramEntities,
       telegramGiftCatalog: deps.storage.telegramGiftCatalog,
       fragment: deps.fragment,

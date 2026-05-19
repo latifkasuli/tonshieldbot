@@ -35,6 +35,7 @@ export const isScanResultCacheable = (
   options: {
     readonly emulatorEnabled: boolean;
     readonly telegramIntelEnabled?: boolean;
+    readonly mtprotoIntelEnabled?: boolean;
     readonly fragmentEnabled?: boolean;
   },
 ): boolean => {
@@ -61,7 +62,9 @@ export const isScanResultCacheable = (
     input.kind === "telegram_nft_link";
   if (
     telegramShaped &&
-    (options.telegramIntelEnabled === true || options.fragmentEnabled === true)
+    (options.telegramIntelEnabled === true ||
+      options.mtprotoIntelEnabled === true ||
+      options.fragmentEnabled === true)
   ) {
     return false;
   }

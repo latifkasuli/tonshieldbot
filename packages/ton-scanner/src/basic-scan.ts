@@ -12,6 +12,7 @@ import type { FetchCache } from "@tonshield/safe-fetch";
 import type { FragmentIntelClient, OwnershipCache } from "@tonshield/fragment-intel";
 import type { GiftCatalogStore, TelegramEntityStore } from "@tonshield/storage";
 import type { TelegramIntelClient } from "@tonshield/telegram-intel";
+import type { MtprotoIntelClient } from "@tonshield/telegram-intel/mtproto";
 import type { TonEmulatorClient } from "@tonshield/ton-emulator";
 import { scanBocWithEmulation } from "./boc/scanner.ts";
 import { classifyInput } from "./classify-input.ts";
@@ -48,6 +49,11 @@ export interface CreateBasicScanInput {
    * scans surface `TELEGRAM_BOT_API_NOT_CONFIGURED`.
    */
   readonly telegramIntel?: TelegramIntelClient;
+  /**
+   * Optional MTProto username resolver. Used only as a cold public username
+   * fallback after Bot API and observed snapshots cannot resolve a handle.
+   */
+  readonly mtprotoIntel?: MtprotoIntelClient;
   /**
    * Telegram entity snapshot store. Required for any Telegram-shaped
    * scan. In production this comes from `storage.telegramEntities`;
@@ -90,6 +96,7 @@ export const createBasicScan = async (input: CreateBasicScanInput): Promise<Scan
     ...(input.cache === undefined ? {} : { cache: input.cache }),
     ...(input.emulator === undefined ? {} : { emulator: input.emulator }),
     ...(input.telegramIntel === undefined ? {} : { telegramIntel: input.telegramIntel }),
+    ...(input.mtprotoIntel === undefined ? {} : { mtprotoIntel: input.mtprotoIntel }),
     ...(input.telegramEntities === undefined ? {} : { telegramEntities: input.telegramEntities }),
     ...(input.telegramGiftCatalog === undefined
       ? {}
@@ -121,6 +128,7 @@ interface GatherDeps {
   readonly cache?: FetchCache;
   readonly emulator?: TonEmulatorClient;
   readonly telegramIntel?: TelegramIntelClient;
+  readonly mtprotoIntel?: MtprotoIntelClient;
   readonly telegramEntities?: TelegramEntityStore;
   readonly telegramGiftCatalog?: GiftCatalogStore;
   readonly fragment?: FragmentIntelClient;
@@ -276,6 +284,7 @@ const gatherScanResult = async (input: ScanInput, deps: GatherDeps): Promise<Gat
       ...(deps.now === undefined ? {} : { now: deps.now }),
       ...(deps.telegramGiftCatalog === undefined ? {} : { giftCatalog: deps.telegramGiftCatalog }),
       ...(deps.fragment === undefined ? {} : { fragment: deps.fragment }),
+      ...(deps.mtprotoIntel === undefined ? {} : { mtproto: deps.mtprotoIntel }),
       ...(deps.fragmentCache === undefined ? {} : { fragmentCache: deps.fragmentCache }),
     });
     return {

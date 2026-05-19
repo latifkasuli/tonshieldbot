@@ -12,7 +12,9 @@ import type { RateLimiter } from "@tonshield/rate-limit";
 import { createStorage } from "@tonshield/storage";
 import type { Storage } from "@tonshield/storage";
 import { createTelegramIntelClient } from "@tonshield/telegram-intel";
+import { createMtprotoIntelClient } from "@tonshield/telegram-intel/mtproto";
 import type { TelegramIntelClient } from "@tonshield/telegram-intel";
+import type { MtprotoIntelClient } from "@tonshield/telegram-intel/mtproto";
 import { createTonEmulatorClient } from "@tonshield/ton-emulator";
 import type { TonEmulatorClient } from "@tonshield/ton-emulator";
 import type { ApiConfig } from "./env.ts";
@@ -35,6 +37,8 @@ export interface ApiDependencies {
    * attempting any Bot API calls.
    */
   readonly telegramIntel: TelegramIntelClient;
+  /** Optional MTProto fallback for cold public username resolution. */
+  readonly mtprotoIntel: MtprotoIntelClient;
   /**
    * Fragment intel client for on-chain username NFT lookups (PR-36).
    * Shares the TONAPI key with the emulator; when absent, Telegram-handle
@@ -88,10 +92,20 @@ export const createApiDependencies = (config: ApiConfig): ApiDependencies => {
     token: config.telegramIntelBotToken ?? null,
     apiBaseUrl: config.telegramApiBaseUrl ?? "https://api.telegram.org",
   });
+  const mtprotoIntel = createMtprotoIntelClient({
+    apiId: config.telegramMtprotoApiId ?? null,
+    apiHash: config.telegramMtprotoApiHash ?? null,
+    botToken: config.telegramMtprotoBotToken ?? config.telegramIntelBotToken ?? null,
+    session: config.telegramMtprotoSession ?? null,
+  });
 
   logger.info(
     { enabled: telegramIntel.enabled, baseUrl: telegramIntel.apiBaseUrl },
     "telegram_intel_initialized",
+  );
+  logger.info(
+    { enabled: mtprotoIntel.enabled, authMode: mtprotoIntel.authMode },
+    "telegram_mtproto_intel_initialized",
   );
 
   const fragment = createFragmentIntelClient({
@@ -112,9 +126,11 @@ export const createApiDependencies = (config: ApiConfig): ApiDependencies => {
     redis,
     emulator,
     telegramIntel,
+    mtprotoIntel,
     fragment,
     fragmentCache,
     close: async () => {
+      await mtprotoIntel.close();
       await storage.close();
       if (redis !== null) {
         await redis.quit();

@@ -21,6 +21,7 @@ import {
   type TelegramIntelClient,
   type WatchlistMatch,
 } from "@tonshield/telegram-intel";
+import type { MtprotoIntelClient, MtprotoResolveResult } from "@tonshield/telegram-intel/mtproto";
 import type { FragmentIntelClient, OwnershipCache } from "@tonshield/fragment-intel";
 import type { GiftCatalogStore, TelegramEntityStore } from "@tonshield/storage";
 import { checkFragmentHandoffForCandidates } from "./fragment-handoff.ts";
@@ -99,6 +100,12 @@ export const scanTelegramEntity = async (
      */
     readonly fragment?: FragmentIntelClient;
     /**
+     * Optional MTProto resolver for cold public username lookups. Bot API
+     * remains the primary resolver; MTProto is only used after Bot API and
+     * the local username cache cannot resolve the handle.
+     */
+    readonly mtproto?: MtprotoIntelClient;
+    /**
      * Optional shared cache for Fragment ownership lookups. When set,
      * repeated lookups within a scan reuse the cached result instead
      * of re-issuing TONAPI calls. Apps wire this from a process-wide
@@ -168,7 +175,7 @@ export const scanTelegramEntity = async (
     return ageFinding === null ? merged : mergeResults(merged, single(ageFinding));
   }
 
-  if (client?.enabled !== true) {
+  if (client?.enabled !== true && options.mtproto?.enabled !== true) {
     return mergeResults(
       inputHandleFindings,
       inputFakeBotFindings,
@@ -178,13 +185,31 @@ export const scanTelegramEntity = async (
     );
   }
 
-  // ── Cold user/bot @handle path — always not-resolvable ───────────────
+  // ── Cold user/bot @handle path — MTProto can resolve when configured ─
   if (input.userOrBotHandle !== undefined) {
+    const mtprotoResult = await resolveWithMtproto(options.mtproto, input.userOrBotHandle);
+    if (mtprotoResult.status === "ok") {
+      return await scanResolvedEntity({
+        store,
+        entity: mtprotoResult.entity,
+        source: "mtproto",
+        now,
+        cooldownMs,
+        watchlist,
+        pastedHandle,
+        inputHandleFindings,
+        inputFakeBotFindings,
+        inputKnownRiskFindings,
+        fragmentScan: await runFragment([pastedHandle, mtprotoResult.entity.username]),
+      });
+    }
+
     const result = resolveUserOrBot(input.userOrBotHandle);
     return mergeResults(
       inputHandleFindings,
       inputFakeBotFindings,
       inputKnownRiskFindings,
+      mtprotoResult.findings,
       await runFragment([pastedHandle]),
       mapNonOkResolverResult(result, "user_or_bot_handle_requires_prior_context"),
     );
@@ -193,17 +218,58 @@ export const scanTelegramEntity = async (
   let result: ResolverResult;
 
   if (input.numericId !== undefined) {
-    result = await resolveById(client, input.numericId);
+    result =
+      client?.enabled === true
+        ? await resolveById(client, input.numericId)
+        : { status: "disabled" };
   } else if (input.channelOrSupergroupHandle !== undefined) {
-    result = await resolveChannelOrSupergroup(client, input.channelOrSupergroupHandle);
-    if (result.status === "not_resolvable") {
-      const observedEntity = await store.findEntityByUsername(
-        input.channelOrSupergroupHandle.replace(/^@/, ""),
-      );
+    result =
+      client?.enabled === true
+        ? await resolveChannelOrSupergroup(client, input.channelOrSupergroupHandle)
+        : { status: "disabled" };
+    if (result.status === "not_resolvable" || result.status === "disabled") {
+      const observedEntity =
+        client?.enabled === true
+          ? await store.findEntityByUsername(input.channelOrSupergroupHandle.replace(/^@/, ""))
+          : null;
       if (observedEntity !== null) {
-        const observedResult = await resolveById(client, observedEntity.id);
+        const observedResult =
+          client?.enabled === true
+            ? await resolveById(client, observedEntity.id)
+            : ({ status: "disabled" } as const);
         if (observedResult.status === "ok") {
           result = observedResult;
+        }
+      }
+      if (result.status === "not_resolvable" || result.status === "disabled") {
+        const mtprotoResult = await resolveWithMtproto(
+          options.mtproto,
+          input.channelOrSupergroupHandle,
+        );
+        if (mtprotoResult.status === "ok") {
+          return await scanResolvedEntity({
+            store,
+            entity: mtprotoResult.entity,
+            source: "mtproto",
+            now,
+            cooldownMs,
+            watchlist,
+            pastedHandle,
+            inputHandleFindings,
+            inputFakeBotFindings,
+            inputKnownRiskFindings,
+            fragmentScan: await runFragment([pastedHandle, mtprotoResult.entity.username]),
+          });
+        }
+        if (mtprotoResult.findings.findings.length > 0) {
+          return mergeResults(
+            inputHandleFindings,
+            inputFakeBotFindings,
+            inputKnownRiskFindings,
+            mtprotoResult.findings,
+            await runFragment([pastedHandle]),
+            mapNonOkResolverResult(result, "channel_or_supergroup_not_found"),
+          );
         }
       }
     }
@@ -226,25 +292,19 @@ export const scanTelegramEntity = async (
   }
 
   if (result.status === "ok") {
-    const downstream = await snapshotAndDiff(store, result.entity, "getChat", now, cooldownMs);
-    const impersonation = checkResolvedEntity(result.entity, watchlist);
-    const fakeBot = checkSensitiveBotCategory(pastedHandle, result.entity, watchlist);
-    // Resolved entity exposes its canonical username; feed it alongside
-    // any pasted handle so alias-resolution cases (`@alias` resolves to
-    // `@real`) still trigger the handoff check.
-    const fragmentScan = await runFragment([pastedHandle, result.entity.username]);
-    const merged = mergeResults(
+    const withAge = await scanResolvedEntity({
+      store,
+      entity: result.entity,
+      source: "getChat",
+      now,
+      cooldownMs,
+      watchlist,
+      pastedHandle,
       inputHandleFindings,
       inputFakeBotFindings,
       inputKnownRiskFindings,
-      fragmentScan,
-      impersonation,
-      fakeBot,
-      checkKnownRiskProject(result.entity.username),
-      downstream,
-    );
-    const ageFinding = checkEntityAge(result.entity, merged.findings, now);
-    const withAge = ageFinding === null ? merged : mergeResults(merged, single(ageFinding));
+      fragmentScan: await runFragment([pastedHandle, result.entity.username]),
+    });
 
     // M3 PR-8: opportunistic gift-publisher check for channels / supergroups
     // when the caller wired a catalog store. Degrades silently when
@@ -252,12 +312,14 @@ export const scanTelegramEntity = async (
     // case) so we don't pollute unrelated reports.
     // `client.enabled === true` is already guaranteed by the
     // short-circuit at the top of this function.
+    const botApiClient = client?.enabled ? client : null;
     if (
       options.giftCatalog !== undefined &&
+      botApiClient !== null &&
       (result.entity.kind === "channel" || result.entity.kind === "supergroup")
     ) {
       const giftFindings = await scanChatGiftsForUnknownPublisher(
-        client,
+        botApiClient,
         options.giftCatalog,
         result.entity.id,
       );
@@ -283,10 +345,94 @@ export const scanTelegramEntity = async (
   );
 };
 
+const scanResolvedEntity = async (input: {
+  readonly store: TelegramEntityStore;
+  readonly entity: ResolvedEntity;
+  readonly source: "getChat" | "mtproto";
+  readonly now: Date;
+  readonly cooldownMs: number;
+  readonly watchlist: readonly BrandWatchlistEntry[];
+  readonly pastedHandle: string | null;
+  readonly inputHandleFindings: TelegramScanResult;
+  readonly inputFakeBotFindings: TelegramScanResult;
+  readonly inputKnownRiskFindings: TelegramScanResult;
+  readonly fragmentScan: TelegramScanResult;
+}): Promise<TelegramScanResult> => {
+  const downstream = await snapshotAndDiff(
+    input.store,
+    input.entity,
+    input.source,
+    input.now,
+    input.cooldownMs,
+  );
+  const impersonation = checkResolvedEntity(input.entity, input.watchlist);
+  const fakeBot = checkSensitiveBotCategory(input.pastedHandle, input.entity, input.watchlist);
+  const merged = mergeResults(
+    input.inputHandleFindings,
+    input.inputFakeBotFindings,
+    input.inputKnownRiskFindings,
+    input.fragmentScan,
+    impersonation,
+    fakeBot,
+    checkKnownRiskProject(input.entity.username),
+    downstream,
+  );
+  const ageFinding = checkEntityAge(input.entity, merged.findings, input.now);
+  return ageFinding === null ? merged : mergeResults(merged, single(ageFinding));
+};
+
+const resolveWithMtproto = async (
+  mtproto: MtprotoIntelClient | undefined,
+  handle: string,
+): Promise<
+  | {
+      readonly status: "ok";
+      readonly entity: ResolvedEntity;
+      readonly findings: TelegramScanResult;
+    }
+  | {
+      readonly status: "not_ok";
+      readonly result: MtprotoResolveResult;
+      readonly findings: TelegramScanResult;
+    }
+> => {
+  if (mtproto?.enabled !== true) {
+    return { status: "not_ok", result: { status: "disabled" }, findings: EMPTY_RESULT };
+  }
+
+  const result = await mtproto.resolveUsername(handle);
+  if (result.status === "ok") {
+    return { status: "ok", entity: result.entity, findings: EMPTY_RESULT };
+  }
+
+  if (result.status === "rate_limited" || result.status === "failed") {
+    return {
+      status: "not_ok",
+      result,
+      findings: single(
+        createFinding({
+          confidence: "low",
+          evidence:
+            result.status === "rate_limited"
+              ? {
+                  reason: result.status,
+                  retryAfter: result.retryAfter,
+                  description: result.description,
+                }
+              : { reason: result.status, description: result.description },
+          rule: getCoreRule("TELEGRAM_MTPROTO_LOOKUP_UNAVAILABLE"),
+        }),
+      ),
+    };
+  }
+
+  return { status: "not_ok", result, findings: EMPTY_RESULT };
+};
+
 const snapshotAndDiff = async (
   store: TelegramEntityStore,
   entity: ResolvedEntity,
-  source: "getChat" | "forward",
+  source: "getChat" | "forward" | "mtproto",
   now: Date,
   cooldownMs: number,
 ): Promise<TelegramScanResult> => {

@@ -12,6 +12,7 @@ const app = createApiServer({
   rateLimiter: deps.rateLimiter,
   emulator: deps.emulator,
   telegramIntel: deps.telegramIntel,
+  mtprotoIntel: deps.mtprotoIntel,
   telegramEntities: deps.storage.telegramEntities,
   telegramGiftCatalog: deps.storage.telegramGiftCatalog,
   fragment: deps.fragment,

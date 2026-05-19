@@ -30,6 +30,15 @@ const envSchema = z.object({
   // self-hosting a local Bot API server per
   // <https://core.telegram.org/bots/api#using-a-local-bot-api-server>.
   TELEGRAM_API_BASE_URL: z.string().optional(),
+  // Optional MTProto username resolver. Requires an api_id/api_hash from
+  // https://my.telegram.org/apps. If TELEGRAM_MTPROTO_BOT_TOKEN is absent,
+  // deps reuse TELEGRAM_INTEL_BOT_TOKEN for bot-auth MTProto login.
+  TELEGRAM_MTPROTO_API_ID: z.coerce.number().int().positive().optional(),
+  TELEGRAM_MTPROTO_API_HASH: z.string().min(1).optional(),
+  TELEGRAM_MTPROTO_BOT_TOKEN: z.string().min(1).optional(),
+  // Advanced: pre-authenticated GramJS StringSession. Prefer bot-token auth
+  // unless a user session is explicitly needed and reviewed.
+  TELEGRAM_MTPROTO_SESSION: z.string().min(1).optional(),
 });
 
 export interface ApiConfig {
@@ -41,6 +50,10 @@ export interface ApiConfig {
   readonly tonApiBaseUrl: string | undefined;
   readonly telegramIntelBotToken: string | undefined;
   readonly telegramApiBaseUrl: string | undefined;
+  readonly telegramMtprotoApiId: number | undefined;
+  readonly telegramMtprotoApiHash: string | undefined;
+  readonly telegramMtprotoBotToken: string | undefined;
+  readonly telegramMtprotoSession: string | undefined;
 }
 
 const DEFAULT_PORT = 3000;
@@ -57,5 +70,9 @@ export const loadApiConfig = (env: NodeJS.ProcessEnv = process.env): ApiConfig =
     tonApiBaseUrl: parsed.TONAPI_BASE_URL,
     telegramIntelBotToken: parsed.TELEGRAM_INTEL_BOT_TOKEN,
     telegramApiBaseUrl: parsed.TELEGRAM_API_BASE_URL,
+    telegramMtprotoApiId: parsed.TELEGRAM_MTPROTO_API_ID,
+    telegramMtprotoApiHash: parsed.TELEGRAM_MTPROTO_API_HASH,
+    telegramMtprotoBotToken: parsed.TELEGRAM_MTPROTO_BOT_TOKEN,
+    telegramMtprotoSession: parsed.TELEGRAM_MTPROTO_SESSION,
   };
 };

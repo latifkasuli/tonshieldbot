@@ -3,6 +3,7 @@ import * as emulator from "@tonshield/ton-emulator";
 import type { TonEmulatorClient } from "@tonshield/ton-emulator";
 import { createInMemoryTelegramEntityStore } from "@tonshield/storage";
 import type { TelegramIntelClient } from "@tonshield/telegram-intel";
+import type { MtprotoIntelClient } from "@tonshield/telegram-intel/mtproto";
 import { createBasicScan } from "../src/basic-scan.ts";
 
 // Mock the emulator boundary so we can detect calls without making any
@@ -189,6 +190,95 @@ describe("createBasicScan — Telegram inputs that should never look 'clean' by 
       source: "getChat",
       displayName: "Latif Kasuli",
     });
+  });
+
+  it("falls back to MTProto for cold public user handles when Bot API cannot resolve them", async () => {
+    const getChat = vi.fn().mockRejectedValue(
+      Object.assign(new Error("Bad Request: chat not found"), {
+        error_code: 400,
+        description: "Bad Request: chat not found",
+      }),
+    );
+    const telegramIntel: TelegramIntelClient = {
+      enabled: true,
+      apiBaseUrl: "https://api.telegram.org",
+      raw: { getChat } as unknown as TelegramIntelClient["raw"],
+    };
+    const resolveUsername = vi.fn().mockResolvedValue({
+      status: "ok",
+      entity: {
+        id: 424242n,
+        kind: "user",
+        username: "latifkasuli",
+        activeUsernames: null,
+        displayName: "Latif Kasuli",
+        bio: null,
+        photoFileUniqueId: null,
+        isPremium: null,
+        memberCount: null,
+        isBot: false,
+        raw: {},
+      },
+    });
+    const mtprotoIntel: MtprotoIntelClient = {
+      enabled: true,
+      authMode: "bot",
+      resolveUsername,
+      close: vi.fn(),
+    };
+    const telegramEntities = createInMemoryTelegramEntityStore();
+
+    const report = await createBasicScan({
+      rawInput: "@latifkasuli",
+      telegramIntel,
+      mtprotoIntel,
+      telegramEntities,
+    });
+
+    expect(getChat).toHaveBeenCalledWith("@latifkasuli");
+    expect(resolveUsername).toHaveBeenCalledWith("@latifkasuli");
+    expect(report.findings.map((f) => f.ruleId)).not.toContain("TELEGRAM_ENTITY_NOT_RESOLVABLE");
+    const latest = await telegramEntities.latestSnapshot(424242n);
+    expect(latest).toMatchObject({
+      username: "latifkasuli",
+      entityKind: "user",
+      source: "mtproto",
+    });
+  });
+
+  it("uses MTProto for public handles even when Bot API intel is disabled", async () => {
+    const resolveUsername = vi.fn().mockResolvedValue({
+      status: "ok",
+      entity: {
+        id: 777777n,
+        kind: "bot",
+        username: "somewalletbot",
+        activeUsernames: null,
+        displayName: "Some Wallet",
+        bio: null,
+        photoFileUniqueId: null,
+        isPremium: null,
+        memberCount: null,
+        isBot: true,
+        raw: {},
+      },
+    });
+    const mtprotoIntel: MtprotoIntelClient = {
+      enabled: true,
+      authMode: "bot",
+      resolveUsername,
+      close: vi.fn(),
+    };
+
+    const report = await createBasicScan({
+      rawInput: "@somewalletbot",
+      mtprotoIntel,
+      telegramEntities: createInMemoryTelegramEntityStore(),
+    });
+
+    expect(resolveUsername).toHaveBeenCalledWith("@somewalletbot");
+    expect(report.findings.map((f) => f.ruleId)).not.toContain("TELEGRAM_BOT_API_NOT_CONFIGURED");
+    expect(report.findings.map((f) => f.ruleId)).not.toContain("TELEGRAM_ENTITY_NOT_RESOLVABLE");
   });
 
   it("flags an exact official handle when the project itself is locally risk-listed", async () => {

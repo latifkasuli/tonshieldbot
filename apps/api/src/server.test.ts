@@ -11,6 +11,7 @@ import {
 import type { ApiKeyScope, ApiKeyStore, ReportStore } from "@tonshield/storage";
 import { createFragmentIntelClient, createOwnershipCache } from "@tonshield/fragment-intel";
 import { createTelegramIntelClient } from "@tonshield/telegram-intel";
+import { createMtprotoIntelClient } from "@tonshield/telegram-intel/mtproto";
 import { createTonEmulatorClient } from "@tonshield/ton-emulator";
 import { createApiServer } from "./server.ts";
 
@@ -56,6 +57,12 @@ const buildApp = async (
     token: null,
     apiBaseUrl: "https://api.telegram.org",
   });
+  const mtprotoIntel = createMtprotoIntelClient({
+    apiId: null,
+    apiHash: null,
+    botToken: null,
+    session: null,
+  });
   const telegramEntities = createInMemoryTelegramEntityStore();
   const telegramGiftCatalog = createInMemoryGiftCatalogStore();
 
@@ -69,6 +76,7 @@ const buildApp = async (
     rateLimiter: createInMemoryRateLimiter(),
     emulator,
     telegramIntel,
+    mtprotoIntel,
     telegramEntities,
     telegramGiftCatalog,
     fragment,

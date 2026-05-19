@@ -4,11 +4,13 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./mtproto": "./src/mtproto-client.ts"
   },
   "dependencies": {
     "@tonshield/shared": "workspace:*",
     "grammy": "^1.42.0",
+    "telegram": "^2.26.22",
     "unicode-confusables": "^0.1.1",
     "zod": "^4.4.3"
   },

@@ -12,7 +12,9 @@ import type { RateLimiter } from "@tonshield/rate-limit";
 import { createStorage } from "@tonshield/storage";
 import type { Storage } from "@tonshield/storage";
 import { createTelegramIntelClient } from "@tonshield/telegram-intel";
+import { createMtprotoIntelClient } from "@tonshield/telegram-intel/mtproto";
 import type { TelegramIntelClient } from "@tonshield/telegram-intel";
+import type { MtprotoIntelClient } from "@tonshield/telegram-intel/mtproto";
 import { createTonEmulatorClient } from "@tonshield/ton-emulator";
 import type { TonEmulatorClient } from "@tonshield/ton-emulator";
 import type { BotConfig } from "./config.ts";
@@ -30,6 +32,8 @@ export interface BotDependencies {
    * TELEGRAM_BOT_API_NOT_CONFIGURED instead of attempting Bot API calls.
    */
   readonly telegramIntel: TelegramIntelClient;
+  /** Optional MTProto fallback for cold public username resolution. */
+  readonly mtprotoIntel: MtprotoIntelClient;
   /** Fragment intel client (PR-36) — on-chain username NFT lookups. */
   readonly fragment: FragmentIntelClient;
   /** Process-wide TTL cache for Fragment ownership lookups. */
@@ -71,10 +75,20 @@ export const createBotDependencies = (config: BotConfig): BotDependencies => {
     token: config.telegramIntelBotToken ?? null,
     apiBaseUrl: config.telegramApiBaseUrl ?? "https://api.telegram.org",
   });
+  const mtprotoIntel = createMtprotoIntelClient({
+    apiId: config.telegramMtprotoApiId ?? null,
+    apiHash: config.telegramMtprotoApiHash ?? null,
+    botToken: config.telegramMtprotoBotToken ?? config.telegramIntelBotToken ?? null,
+    session: config.telegramMtprotoSession ?? null,
+  });
 
   logger.info(
     { enabled: telegramIntel.enabled, baseUrl: telegramIntel.apiBaseUrl },
     "telegram_intel_initialized",
+  );
+  logger.info(
+    { enabled: mtprotoIntel.enabled, authMode: mtprotoIntel.authMode },
+    "telegram_mtproto_intel_initialized",
   );
 
   const fragment = createFragmentIntelClient({
@@ -95,9 +109,11 @@ export const createBotDependencies = (config: BotConfig): BotDependencies => {
     redis,
     emulator,
     telegramIntel,
+    mtprotoIntel,
     fragment,
     fragmentCache,
     close: async () => {
+      await mtprotoIntel.close();
       await storage.close();
       if (redis !== null) {
         await redis.quit();

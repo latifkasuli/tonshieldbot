@@ -568,6 +568,17 @@ export const coreRules = [
     recommendation: "Retry shortly. If this persists, check TONAPI status and rate-limit budget.",
     defaultScoreDelta: 10,
   },
+  {
+    id: "TELEGRAM_MTPROTO_LOOKUP_UNAVAILABLE",
+    category: "telegram",
+    severity: "low",
+    title: "MTProto username lookup unavailable",
+    description:
+      "The scanner attempted the MTProto username resolver after Bot API could not resolve the handle, but the lookup failed or hit a Telegram flood wait. The report falls back to Bot API, cached snapshots, and static Telegram signals.",
+    recommendation:
+      "Retry later or forward a message from the target to TON Shield so the bot can observe the stable Telegram ID without a cold username lookup.",
+    defaultScoreDelta: 10,
+  },
 ] as const satisfies readonly RuleDefinition[];
 
 export type CoreRuleId = (typeof coreRules)[number]["id"];
